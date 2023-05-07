@@ -261,6 +261,7 @@ function check(submitInfo: string) {
         }//nagai foreachを途中でやめることはできないらしい……無駄すぎるがとりあえず
     });
     if (endgame === true) {
+        //面倒なのでとりあえず画面側でstateから計算して判定してもらう。
         //終了したなら配列から盤面を消してしまう（終了通知なども必要）
         delete boards[rmid];
     }

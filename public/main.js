@@ -73,23 +73,21 @@ socketio.on('opponentSelect', function (data) {
     for (let i = 0; i < elements.length; i++) {
         elements[i].classList.remove('opoClick');
     }
-
     if (data !== '') {
         document.getElementById(data).classList.add('opoClick');
     }
 });
-
 //ゲームのイベント
 socketio.on('event', function (data) {
+    //今は文字を画面に表示しているだけなので文字列で送ってくるだけで良い……。
     const eventData = JSON.parse(data);
     const who = eventData.userid === userid ? 'あなた' : '相手';
     const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
     const seigo = eventData.status === 'correct' ? '正解' : '不正解';
     const nyuuryoku = eventData.val;
     const log = seigo + ':' + who + ' 入力' + nyuuryoku + ' ' + zahyo;
-    document.getElementById('log').value += log + "\n";
-
     const txarea = document.getElementById('log');
+    txarea.value += log + "\n";
     txarea.scrollTop = txarea.scrollHeight;
 });
 //全盤面の情報取得
@@ -103,6 +101,7 @@ socketio.on("state", function (data) {
 
     let bData = state['board'];
     let points = state['points'];
+    let endgame = true;
 
     for (let i = 0; i < 9; i++) {
         for (let j = 0; j < 9; j++) {
@@ -117,11 +116,13 @@ socketio.on("state", function (data) {
                     document.getElementById(bkey).classList.add('opponent');
                 }
             }
+            if (bData[bkey].val === '-') {
+                endgame = false;
+            }
         }
     }
-
     //checkPoint();
-    scoreProcess(points);
+    scoreProcess(points, endgame);
 });
 
 // クリックされた要素を保持
@@ -149,7 +150,7 @@ function render_empty_board() {
 
 let button = document.getElementById('go_game');
 button.onclick = goGameButtonClick;
-function goGameButtonClick(e){
+function goGameButtonClick(e) {
     document.getElementById('waiting_disp').style.display = 'flex';
     document.getElementById('go_game').style.display = 'none';
     socketio.emit("gogame");
@@ -219,7 +220,7 @@ function checkPoint() {
 }
 
 // 点数処理
-function scoreProcess(points) {
+function scoreProcess(points, endgame) {
     let mypoint = 0;
     let opopoint = 0;
     Object.keys(points).forEach(key => {
@@ -231,6 +232,19 @@ function scoreProcess(points) {
     });
     document.getElementById("point_1").textContent = mypoint;
     document.getElementById("point_2").textContent = opopoint;
+
+    if (endgame) {
+        const txarea = document.getElementById('log');
+        txarea.value += 'ゲーム終了' + "\n";
+        txarea.scrollTop = txarea.scrollHeight;
+        if (mypoint > opopoint) {//nagai numberのはずなのでこの比較であっているはず
+            document.getElementById('disp2').textContent = '勝利!!!!!';
+        } else if (mypoint === opopoint) {
+            document.getElementById('disp2').textContent = '引き分け!';
+        } else {
+            document.getElementById('disp2').textContent = '敗北';
+        }
+    }
 }
 
 // 正解判定
