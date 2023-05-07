@@ -1,0 +1,36 @@
+Azureへのデプロイ
+C:\Users\ngihy\Desktop\nodeserverの階層で。以下コマンドを叩く。
+（古いzipがあったらそれは削除する。）
+npm run build
+distディレクトリのindex.jsを置く
+Compress-Archive -Path * -DestinationPath nodeserver.zip
+az webapp deploy --resource-group nagairesource --name sudokunagai --src-path C:\Users\ngihy\Desktop\nodeserver\nodeserver.zip
+
+npx ts-node index.ts
+
+↓答えを作るコマンドは確か以下のような感じ。旧PCのwsl2上で実行（powershellだとどうしても出力をテキストファイルに出せなかった）
+java -jar NP.jar -s .\data\Problem500.txt
+
+
+github
+
+
+参考
+CSS待ち状態
+https://projects.lukehaas.me/css-loaders/
+数独自動生成
+https://github.com/timedia/puzzle-generator
+
+
+
+メモ
+//・連打制限?（前の入力から0.1秒以上は開けるようにする）
+・対戦終了後
+　・再度ロビーに戻れる
+　・ロビーに戻ったときは自動的に対戦待ちにはしない……
+　・（というかそもそもいきなり対戦待ちにするのがおかしい）
+・Win,Loseの文字
+・相手がいなくなったときの処理
+・そもそも自分がサーバーに繋がらないとき
+・レート計算
+

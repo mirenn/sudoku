@@ -1,82 +1,54 @@
-import express from 'express';
-import socketio from 'socket.io';
-import http, { IncomingMessage, ServerResponse } from 'http'
-import fs from 'fs'
-
-let answertext = fs.readFileSync("./answer.txt");
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const socket_io_1 = __importDefault(require("socket.io"));
+const http_1 = __importDefault(require("http"));
+const fs_1 = __importDefault(require("fs"));
+let answertext = fs_1.default.readFileSync("./answer.txt");
 let astxt = answertext.toString();
 let answerlines = astxt.split('\n');
-let problemtext = fs.readFileSync("./problem.txt", 'utf8');
+let problemtext = fs_1.default.readFileSync("./problem.txt", 'utf8');
 let problemlines = problemtext.toString().split('\n');
-
-const app: express.Express = express()
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+const app = (0, express_1.default)();
+app.use(express_1.default.json());
+app.use(express_1.default.urlencoded({ extended: true }));
 const PORT = process.env.PORT || 3000;
-
-//現在の開示されている盤面情報オブジェクト:キーは座標。保持している情報は、id:socketid、もしくはどちらでもないなら'auto'。そのマスの見えている数字
-//誰が開いたかはこちらではsocketIDの情報として持たせる。
-interface board {
-    [coordinate: string]: {//座標
-        id: string,//開いた人のid 自動:auto,まだ:mada,プレイヤー:userid
-        val: string,//見えている値
-    }
-}
-//どの部屋の盤面か
-interface roomDictionaryArray {
-    // (文字型のキー):  string
-    [rooms: string]: {
-        board: board,
-        answer: string,
-        points: any,//['points']['userid']ここに各点数が入っている。useridが最初からもてれるならこれでよかったが……、そうではなく初期化時どうしようもないので…空で宣言してからみたいな使い方になる
-        countdown: number,
-        logs: object[]
-    }
-}
 //どんどん溜まっていく一方なので定期的に削除したい。
 //その実装はめちゃくちゃナイーブでとりあえず良く
-let boards: roomDictionaryArray = {};
-
+let boards = {};
 //CROS対応
-app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((req, res, next) => {
     next();
-})
-
+});
 // app.listen(PORT, () => {
 //     console.log("Start on port 7000.")
 // })
-
 let roomNumber = 0;
-
 //一覧取得
 //app.get('/', express.static('public'));
-app.use('/', express.static('public'));
+app.use('/', express_1.default.static('public'));
 // ディレクトリでindex.htmlをリク・レス
 // app.get('/', (req, res) => {
 //     res.sendFile(__dirname  + '/public/index.html');
 //   });
-
-const server: http.Server = http.createServer(app);
-
-const io: socketio.Server = new socketio.Server(server);
-
+const server = http_1.default.createServer(app);
+const io = new socket_io_1.default.Server(server);
 /*connection(webSocket確立時)*/
 io.on('connection', function (socket) {
     const count = io.engine.clientsCount;
     // may or may not be similar to the count of Socket instances in the main namespace, depending on your usage
     //const count2 = io.of("/").sockets.size;
-
     //このサイトを開いた瞬間、対戦待ちroomに参加させる
     socket.join('waitingroom');
-
     console.log('connect検知 総コネクト数:', count);
     io.to('waitingroom').emit('waiting', count);
-
     const clients = io.sockets.adapter.rooms.get('waitingroom');
     console.log('待機ルームの人のIDのセット', clients);
     //to get the number of clients in this room
     const numClients = clients ? clients.size : 0;
-
     //リセット。もしだれもいない部屋の盤面があれば消しておく
     Object.keys(boards).forEach(rmkey => {
         let rmclients = io.sockets.adapter.rooms.get(rmkey);
@@ -86,16 +58,13 @@ io.on('connection', function (socket) {
             delete boards[rmkey];
         }
     });
-
-
     if (numClients > 1 && clients) {
         //nagaiもし同時にたくさん人きたら誰か同時に入ってしまいそうなので
         //判定処理は入れる、その部屋に入っている人の数を取得する
         const clientsArr = Array.from(clients);
         //nagai:誰でも入れるので、roomIdは推測不能な文字列にして予防予定
         const roomId = 'room' + String(roomNumber);
-        roomNumber = roomNumber + 1;//次はroom1になるように。
-
+        roomNumber = roomNumber + 1; //次はroom1になるように。
         const cl0 = io.sockets.sockets.get(clientsArr[0]);
         const cl1 = io.sockets.sockets.get(clientsArr[1]);
         if (cl0 && cl1) {
@@ -104,13 +73,11 @@ io.on('connection', function (socket) {
             cl1.leave('waitingroom');
             cl0.join(roomId);
             cl1.join(roomId);
-
             //マッチ
             //io.to(clientsArr[0]).emit('match', roomId);
             //io.to(clientsArr[1]).emit('match', roomId);
             cl0.emit('match', roomId);
             cl1.emit('match', roomId);
-
             const rclients = io.sockets.adapter.rooms.get(roomId);
             console.log(roomId, 'ルームに入っている人のIDのSet', rclients);
             console.log('待機ルームの人のIDのSet', clients);
@@ -123,13 +90,14 @@ io.on('connection', function (socket) {
                 cl1.join('waitingroom');
                 console.log('解散', roomId, 'ルームの人のIDのセット', rclients);
                 console.log('解散', '待機ルームの人のIDのセット', clients);
-            } else {
+            }
+            else {
                 console.log('ゲーム開始');
                 //正常に部屋が立ったなら
                 //ゲームに必要な情報を作成する
                 //盤面の正解の情報,現在の盤面の状態
                 boards[roomId] = generateStartBoard();
-                const state = (({ board, points }) => { return { board, points } })(boards[roomId])
+                const state = (({ board, points }) => { return { board, points }; })(boards[roomId]);
                 io.to(roomId).emit("state", JSON.stringify(state));
                 const intervalid = setInterval(function () {
                     boards[roomId]['countdown'] -= 1;
@@ -144,7 +112,6 @@ io.on('connection', function (socket) {
             //console.log('socket.roomsだよ', socket.rooms);
         }
     }
-
     //クライアントから受けた数独提出答え受け取り用
     socket.on('submit', function (submitInfo) {
         console.log('submitInfo: ' + submitInfo);
@@ -184,19 +151,16 @@ io.on('connection', function (socket) {
         //io.emit('message', msg);//ブロードキャスト
     });
 });
-
 server.listen(PORT, function () {
     console.log('server listening. Port:' + PORT);
 });
-
 function generateStartBoard() {
     let problemnum = getRandomInt(500);
     let startboard = problemlines[problemnum];
     let answer = answerlines[problemnum];
     console.log(startboard);
     console.log(answer);
-
-    const board: board = {};
+    const board = {};
     // 通常のfor文で行う
     for (var i = 0; i < 81; i++) {
         let syou = Math.floor(i / 9);
@@ -212,26 +176,22 @@ function generateStartBoard() {
     //console.log('nagai start board', board);
     return { board: board, answer: answer, points: {}, logs: [], countdown: 6 };
 }
-
 // 正解判定
-function check(submitInfo: string) {
-    let subinfo = JSON.parse(submitInfo);//jsonparseは結構重い処理らしい
+function check(submitInfo) {
+    let subinfo = JSON.parse(submitInfo); //jsonparseは結構重い処理らしい
     let usid = subinfo['userid'];
     let rmid = subinfo['roomid'];
     let cod = subinfo['coordinate'];
-    let val: string = subinfo['val'];
+    let val = subinfo['val'];
     let indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
     if (!(usid in boards[rmid]['points'])) {
         boards[rmid]['points'][usid] = 0;
     }
-
     if (boards[rmid]['countdown'] > 0) {
         console.log('カウントダウン中のため入力棄却');
     }
-
     //deepcopyでないはずなのでこの時点で代入しておいてよいはず
-    const state = (({ board, points }) => { return { board, points } })(boards[rmid]);
-
+    const state = (({ board, points }) => { return { board, points }; })(boards[rmid]);
     if (boards[rmid]['answer'][indx] == val && boards[rmid]['board'][cod]['val'] === '-') {
         //まだ値が入っていないものに対してだけ
         console.log('nagai 正解');
@@ -243,7 +203,8 @@ function check(submitInfo: string) {
         boards[rmid]['logs'].push(event);
         io.to(rmid).emit("event", JSON.stringify(event));
         io.to(rmid).emit("state", JSON.stringify(state));
-    } else if (boards[rmid]['board'][cod]['val'] === '-') {
+    }
+    else if (boards[rmid]['board'][cod]['val'] === '-') {
         console.log('nagai 不正解');
         //不正解の場合減点
         boards[rmid]['points'][usid] -= parseInt(val);
@@ -252,21 +213,19 @@ function check(submitInfo: string) {
         io.to(rmid).emit("event", JSON.stringify(event));
         io.to(rmid).emit("state", JSON.stringify(state));
     }
-
     // 終了検知//これは少し遅いがとはいえたかが81なので
     let endgame = true;
     //console.log('nagai 最終確認', boards[rmid]['board']);
     Object.keys(boards[rmid]['board']).forEach(key => {
         if (boards[rmid]['board'][key]['val'] === '-') {
             endgame = false;
-        }//nagai foreachを途中でやめることはできないらしい……無駄すぎるがとりあえず
+        } //nagai foreachを途中でやめることはできないらしい……無駄すぎるがとりあえず
     });
     if (endgame === true) {
         //終了したなら配列から盤面を消してしまう（終了通知なども必要）
         delete boards[rmid];
     }
 }
-
-function getRandomInt(max: number) {
+function getRandomInt(max) {
     return Math.floor(Math.random() * max);
 }
