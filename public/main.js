@@ -152,8 +152,7 @@ button.onclick = goGameButtonClick;
 function goGameButtonClick(e){
     document.getElementById('waiting_disp').style.display = 'flex';
     document.getElementById('go_game').style.display = 'none';
-    socketio.emit("gogame", '');
-    
+    socketio.emit("gogame");
 }
 
 
