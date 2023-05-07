@@ -147,7 +147,7 @@ table {
 }
 
 #waiting_disp {
-    display: flex;
+    display: none;
     /*justify-content: center;*/
     align-items: center;
 }
@@ -157,12 +157,15 @@ table {
 }
 
 #waiting_num {
-    margin-left: 1em;
+    /*margin-left: 1em;*/
 }
 
 #log {
     width: 405px;
     height: 50px;
+    font-size: x-large;
+}
+#go_game{
     font-size: x-large;
 }
 

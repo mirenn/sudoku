@@ -11,10 +11,6 @@ npx ts-node index.ts
 ↓答えを作るコマンドは確か以下のような感じ。旧PCのwsl2上で実行（powershellだとどうしても出力をテキストファイルに出せなかった）
 java -jar NP.jar -s .\data\Problem500.txt
 
-
-github
-
-
 参考
 CSS待ち状態
 https://projects.lukehaas.me/css-loaders/
@@ -26,6 +22,7 @@ https://github.com/timedia/puzzle-generator
 メモ
 //・連打制限?（前の入力から0.1秒以上は開けるようにする）
 ・対戦終了後
+　・最初は「対戦する」ボタンを押せるようにする。押したらマッチ待ち状態になる
 　・再度ロビーに戻れる
 　・ロビーに戻ったときは自動的に対戦待ちにはしない……
 　・（というかそもそもいきなり対戦待ちにするのがおかしい）

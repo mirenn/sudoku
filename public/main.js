@@ -32,7 +32,7 @@ render_empty_board();
 
 var socketio = io();
 //接続待ち
-socketio.on('waiting', function (num) {
+socketio.on('connectnum', function (num) {
     $('#waiting_num').text('現在の総接続人数' + num);
 });
 
@@ -41,14 +41,13 @@ socketio.on('match', function (rid) {
     state = null;//初期化
     $('#messages').append($('<li>').text(rid));
     roomId = rid;//nagai:roomidは秘密にするもしくは推測不可能に。
-    $('#waiting_disp').hide();
-    $('#disp').show();
-    $('#disp').text('マッチしました');
+    document.getElementById('waiting_disp').style.display = 'none';
+    document.getElementById('waiting_num').style.display = 'none';
 });
 //マッチ後のカウントダウン
 socketio.on('countdown', function (num) {
     countdown = num;
-    $('#disp2').text('あと' + String(num) + '秒で開始します。');
+    $('#disp2').text('マッチしました。あと' + String(num) + '秒で開始します。');
     if (num < 1) {
         $('#disp2').text('開始');
         $(".numbutton").removeClass("glayout");
@@ -147,6 +146,16 @@ function render_empty_board() {
         td.onclick = selectClick;
     }
 }
+
+let button = document.getElementById('go_game');
+button.onclick = goGameButtonClick;
+function goGameButtonClick(e){
+    document.getElementById('waiting_disp').style.display = 'flex';
+    document.getElementById('go_game').style.display = 'none';
+    socketio.emit("gogame", '');
+    
+}
+
 
 // 問題パネルのマスが押された時の処理
 // mainClickクラスを一か所につける

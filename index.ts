@@ -68,9 +68,7 @@ io.on('connection', function (socket) {
 
     //このサイトを開いた瞬間、対戦待ちroomに参加させる
     socket.join('waitingroom');
-
-    console.log('connect検知 総コネクト数:', count);
-    io.to('waitingroom').emit('waiting', count);
+    io.to('waitingroom').emit('connectnum', count);
 
     const clients = io.sockets.adapter.rooms.get('waitingroom');
     console.log('待機ルームの人のIDのセット', clients);
@@ -86,7 +84,6 @@ io.on('connection', function (socket) {
             delete boards[rmkey];
         }
     });
-
 
     if (numClients > 1 && clients) {
         //nagaiもし同時にたくさん人きたら誰か同時に入ってしまいそうなので
