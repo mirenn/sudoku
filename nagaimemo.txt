@@ -1,12 +1,15 @@
 Azureへのデプロイ
 C:\Users\ngihy\Desktop\nodeserverの階層で。以下コマンドを叩く。
 （古いzipがあったらそれは削除する。）
+rm nodeserver.zip
+rm index.js
 npm run build
-distディレクトリのindex.jsを置く
+mv .\dist\index.js ./
 Compress-Archive -Path * -DestinationPath nodeserver.zip
 az webapp deploy --resource-group nagairesource --name sudokunagai --src-path C:\Users\ngihy\Desktop\nodeserver\nodeserver.zip
 
-npx ts-node index.ts
+実行コマンド↓
+npx ts-node index.ts(今はnpm run startで動くようにしている)
 
 ↓答えを作るコマンドは確か以下のような感じ。旧PCのwsl2上で実行（powershellだとどうしても出力をテキストファイルに出せなかった）
 java -jar NP.jar -s .\data\Problem500.txt
@@ -21,10 +24,20 @@ https://github.com/timedia/puzzle-generator
 
 メモ
 //・連打制限?（前の入力から0.1秒以上は開けるようにする）
-・対戦終了後
-　・終了したら再度ロビーに戻れる
-・Win,Loseの文字
+
+・レート計算＝＞適当に画面側で固定の数値足したり引いたり
+
+ネットワーク例外処理周り
 ・相手がいなくなったときの処理
 ・そもそも自分がサーバーに繋がらないとき
-・レート計算
 
+正解か不正解かは画面上で丸かバツかなどで分かるべき
+user_guidが知られると困るのでそれぞれに返すboardの情報からuserguidを抜いて1か2で自分か相手かを意味するようにする
+DB上にguidとレートを持ちたいがそうすると一気に価格が跳ね上がるのでどうするかな……
+planetsearchでDB作ってみようと思う
+
+CREATE TABLE `users` (
+  `id` binary(16) NOT NULL PRIMARY KEY,
+  `name` varchar(24) NOT NULL,
+  `rate` INT
+);

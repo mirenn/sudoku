@@ -93,15 +93,17 @@ io.on('connection', function (socket) {
                 roomid = rm;
             }
         });
-        const rclients = io.sockets.adapter.rooms.get(roomid);
-        if (rclients) {
-            const rclarray = Array.from(rclients);
-            rclarray.forEach(rcl => {
-                if (rcl !== socket.id) {
-                    io.to(rcl).emit('opponentSelect', data);
-                }
-            });
-        }
+        //相手にだけ送りたいときはbroadcastでできるらしいので実装変更
+        // const rclients = io.sockets.adapter.rooms.get(roomid);
+        // if (rclients) {
+        //     const rclarray = Array.from(rclients);
+        //     rclarray.forEach(rcl => {
+        //         if (rcl !== socket.id) {
+        //             io.to(rcl).emit('opponentSelect', data);
+        //         }
+        //     });
+        // }
+        socket.broadcast.to(roomid).emit('opponentSelect', data);
     });
     //テスト クライアントチャット機能用
     socket.on('message', function (msg) {
@@ -116,9 +118,19 @@ io.on('connection', function (socket) {
         });
         //io.emit('message', msg);//ブロードキャスト
     });
-    //テスト クライアントチャット機能用
+    //待機ルームに入る用
     socket.on('gogame', function () {
         console.log('gogame');
+        //試合後などに再戦する場合、
+        //もともと入っていた部屋全てから抜ける
+        const rooms = Array.from(socket.rooms);
+        let roomid = '';
+        rooms.forEach(rm => {
+            if (rm !== socket.id) {
+                socket.leave(rm);
+            }
+        });
+
         socket.join('waitingroom');
         const clients = io.sockets.adapter.rooms.get('waitingroom');
         console.log('待機ルームの人のIDのセット', clients);
@@ -192,8 +204,10 @@ function generateStartBoard() {
     let problemnum = getRandomInt(500);
     let startboard = problemlines[problemnum];
     let answer = answerlines[problemnum];
-    console.log(startboard);
-    console.log(answer);
+    const asarray = answer.match(/.{9}/g);
+    const askakigyo = asarray?.join('\n');
+    console.log(askakigyo);
+    //console.log(answer);
 
     const board: board = {};
     // 通常のfor文で行う
@@ -261,7 +275,7 @@ function check(submitInfo: string) {
         }//nagai foreachを途中でやめることはできないらしい……無駄すぎるがとりあえず
     });
     if (endgame === true) {
-        //面倒なのでとりあえず画面側でstateから計算して判定してもらう。
+        //面倒なのでとりあえず画面側でstateから判定してもらう
         //終了したなら配列から盤面を消してしまう（終了通知なども必要）
         delete boards[rmid];
     }

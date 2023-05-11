@@ -41,14 +41,7 @@ io.on('connection', function (socket) {
     const count = io.engine.clientsCount;
     // may or may not be similar to the count of Socket instances in the main namespace, depending on your usage
     //const count2 = io.of("/").sockets.size;
-    //このサイトを開いた瞬間、対戦待ちroomに参加させる
-    socket.join('waitingroom');
-    console.log('connect検知 総コネクト数:', count);
-    io.to('waitingroom').emit('waiting', count);
-    const clients = io.sockets.adapter.rooms.get('waitingroom');
-    console.log('待機ルームの人のIDのセット', clients);
-    //to get the number of clients in this room
-    const numClients = clients ? clients.size : 0;
+    io.to('waitingroom').emit('connectnum', count);
     //リセット。もしだれもいない部屋の盤面があれば消しておく
     Object.keys(boards).forEach(rmkey => {
         let rmclients = io.sockets.adapter.rooms.get(rmkey);
@@ -58,60 +51,6 @@ io.on('connection', function (socket) {
             delete boards[rmkey];
         }
     });
-    if (numClients > 1 && clients) {
-        //nagaiもし同時にたくさん人きたら誰か同時に入ってしまいそうなので
-        //判定処理は入れる、その部屋に入っている人の数を取得する
-        const clientsArr = Array.from(clients);
-        //nagai:誰でも入れるので、roomIdは推測不能な文字列にして予防予定
-        const roomId = 'room' + String(roomNumber);
-        roomNumber = roomNumber + 1; //次はroom1になるように。
-        const cl0 = io.sockets.sockets.get(clientsArr[0]);
-        const cl1 = io.sockets.sockets.get(clientsArr[1]);
-        if (cl0 && cl1) {
-            //待機ルームを抜けて対戦ルームに入る
-            cl0.leave('waitingroom');
-            cl1.leave('waitingroom');
-            cl0.join(roomId);
-            cl1.join(roomId);
-            //マッチ
-            //io.to(clientsArr[0]).emit('match', roomId);
-            //io.to(clientsArr[1]).emit('match', roomId);
-            cl0.emit('match', roomId);
-            cl1.emit('match', roomId);
-            const rclients = io.sockets.adapter.rooms.get(roomId);
-            console.log(roomId, 'ルームに入っている人のIDのSet', rclients);
-            console.log('待機ルームの人のIDのSet', clients);
-            const rnumClients = clients ? clients.size : 0;
-            if (rnumClients > 2) {
-                //もし同じ部屋に二人以上入ってしまっていたら解散（そんなことがあるか分からないが）
-                cl0.leave(roomId);
-                cl1.leave(roomId);
-                cl0.join('waitingroom');
-                cl1.join('waitingroom');
-                console.log('解散', roomId, 'ルームの人のIDのセット', rclients);
-                console.log('解散', '待機ルームの人のIDのセット', clients);
-            }
-            else {
-                console.log('ゲーム開始');
-                //正常に部屋が立ったなら
-                //ゲームに必要な情報を作成する
-                //盤面の正解の情報,現在の盤面の状態
-                boards[roomId] = generateStartBoard();
-                const state = (({ board, points }) => { return { board, points }; })(boards[roomId]);
-                io.to(roomId).emit("state", JSON.stringify(state));
-                const intervalid = setInterval(function () {
-                    boards[roomId]['countdown'] -= 1;
-                    io.to(roomId).emit("countdown", boards[roomId]['countdown']);
-                    if (boards[roomId]['countdown'] < 1) {
-                        clearInterval(intervalid);
-                    }
-                }, 1000);
-            }
-            //参考:所属する部屋を取得できる
-            //ただし、自分自身のIDも部屋として取得されるのでそちらは無視する
-            //console.log('socket.roomsだよ', socket.rooms);
-        }
-    }
     //クライアントから受けた数独提出答え受け取り用
     socket.on('submit', function (submitInfo) {
         console.log('submitInfo: ' + submitInfo);
@@ -127,15 +66,17 @@ io.on('connection', function (socket) {
                 roomid = rm;
             }
         });
-        const rclients = io.sockets.adapter.rooms.get(roomid);
-        if (rclients) {
-            const rclarray = Array.from(rclients);
-            rclarray.forEach(rcl => {
-                if (rcl !== socket.id) {
-                    io.to(rcl).emit('opponentSelect', data);
-                }
-            });
-        }
+        //相手にだけ送りたいときはbroadcastでできるらしいので実装変更
+        // const rclients = io.sockets.adapter.rooms.get(roomid);
+        // if (rclients) {
+        //     const rclarray = Array.from(rclients);
+        //     rclarray.forEach(rcl => {
+        //         if (rcl !== socket.id) {
+        //             io.to(rcl).emit('opponentSelect', data);
+        //         }
+        //     });
+        // }
+        socket.broadcast.to(roomid).emit('opponentSelect', data);
     });
     //テスト クライアントチャット機能用
     socket.on('message', function (msg) {
@@ -150,6 +91,78 @@ io.on('connection', function (socket) {
         });
         //io.emit('message', msg);//ブロードキャスト
     });
+    //待機ルームに入る用
+    socket.on('gogame', function () {
+        console.log('gogame');
+        //試合後などに再戦する場合、
+        //もともと入っていた部屋全てから抜ける
+        const rooms = Array.from(socket.rooms);
+        let roomid = '';
+        rooms.forEach(rm => {
+            if (rm !== socket.id) {
+                socket.leave(rm);
+            }
+        });
+        socket.join('waitingroom');
+        const clients = io.sockets.adapter.rooms.get('waitingroom');
+        console.log('待機ルームの人のIDのセット', clients);
+        //to get the number of clients in this room
+        const numClients = clients ? clients.size : 0;
+        if (numClients > 1 && clients) {
+            //nagaiもし同時にたくさん人きたら誰か同時に入ってしまいそうなので
+            //判定処理は入れる、その部屋に入っている人の数を取得する
+            const clientsArr = Array.from(clients);
+            //nagai:誰でも入れるので、roomIdは推測不能な文字列にして予防予定
+            const roomId = 'room' + String(roomNumber);
+            roomNumber = roomNumber + 1; //次はroom1になるように。
+            const cl0 = io.sockets.sockets.get(clientsArr[0]);
+            const cl1 = io.sockets.sockets.get(clientsArr[1]);
+            if (cl0 && cl1) {
+                //待機ルームを抜けて対戦ルームに入る
+                cl0.leave('waitingroom');
+                cl1.leave('waitingroom');
+                cl0.join(roomId);
+                cl1.join(roomId);
+                //マッチ
+                //io.to(clientsArr[0]).emit('match', roomId);
+                //io.to(clientsArr[1]).emit('match', roomId);
+                cl0.emit('match', roomId);
+                cl1.emit('match', roomId);
+                const rclients = io.sockets.adapter.rooms.get(roomId);
+                console.log(roomId, 'ルームに入っている人のIDのSet', rclients);
+                console.log('待機ルームの人のIDのSet', clients);
+                const rnumClients = clients ? clients.size : 0;
+                if (rnumClients > 2) {
+                    //もし同じ部屋に二人以上入ってしまっていたら解散（そんなことがあるか分からないが）
+                    cl0.leave(roomId);
+                    cl1.leave(roomId);
+                    cl0.join('waitingroom');
+                    cl1.join('waitingroom');
+                    console.log('解散', roomId, 'ルームの人のIDのセット', rclients);
+                    console.log('解散', '待機ルームの人のIDのセット', clients);
+                }
+                else {
+                    console.log('ゲーム開始');
+                    //正常に部屋が立ったなら
+                    //ゲームに必要な情報を作成する
+                    //盤面の正解の情報,現在の盤面の状態
+                    boards[roomId] = generateStartBoard();
+                    const state = (({ board, points }) => { return { board, points }; })(boards[roomId]);
+                    io.to(roomId).emit("state", JSON.stringify(state));
+                    const intervalid = setInterval(function () {
+                        boards[roomId]['countdown'] -= 1;
+                        io.to(roomId).emit("countdown", boards[roomId]['countdown']);
+                        if (boards[roomId]['countdown'] < 1) {
+                            clearInterval(intervalid);
+                        }
+                    }, 1000);
+                }
+                //参考:所属する部屋を取得できる
+                //ただし、自分自身のIDも部屋として取得されるのでそちらは無視する
+                //console.log('socket.roomsだよ', socket.rooms);
+            }
+        }
+    });
 });
 server.listen(PORT, function () {
     console.log('server listening. Port:' + PORT);
@@ -158,8 +171,10 @@ function generateStartBoard() {
     let problemnum = getRandomInt(500);
     let startboard = problemlines[problemnum];
     let answer = answerlines[problemnum];
-    console.log(startboard);
-    console.log(answer);
+    const asarray = answer.match(/.{9}/g);
+    const askakigyo = asarray === null || asarray === void 0 ? void 0 : asarray.join('\n');
+    console.log(askakigyo);
+    //console.log(answer);
     const board = {};
     // 通常のfor文で行う
     for (var i = 0; i < 81; i++) {
@@ -222,6 +237,7 @@ function check(submitInfo) {
         } //nagai foreachを途中でやめることはできないらしい……無駄すぎるがとりあえず
     });
     if (endgame === true) {
+        //面倒なのでとりあえず画面側でstateから判定してもらう
         //終了したなら配列から盤面を消してしまう（終了通知なども必要）
         delete boards[rmid];
     }

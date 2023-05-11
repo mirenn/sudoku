@@ -1,8 +1,7 @@
 //ユーザーIDを適当に発行する
 //とりあえず一意でありさえすればよい
-//すでに発行されている場合はそれを使用する
-//localstorageの場合、同じブラウザで開かれると同一のユーザーID同士の対決になり困る
-//テストのために、同ブラウザアクセスの対決は許可する
+//localstorageに持たせる予定だが、同じブラウザで開かれると同一のユーザーID同士の対決になり困る
+//テストのために同ブラウザアクセスの対決は許可したいのでsessionstorageに……。
 
 //let userid = localStorage.getItem('userid');
 let userid = null;
@@ -39,6 +38,20 @@ socketio.on('connectnum', function (num) {
 //マッチしたとき
 socketio.on('match', function (rid) {
     state = null;//初期化
+    /////色をつけるクラスはずして初期化
+    const opoele = document.getElementsByClassName('opponent');
+    while(opoele.length){
+        opoele[0].classList.remove('opponent');
+    }
+    const ownele = document.getElementsByClassName('own'); 
+    while(ownele.length){
+        ownele[0].classList.remove('own');
+    }    
+    const opocliele = document.getElementsByClassName('opoClick'); 
+    while(opocliele.length){
+        opocliele[0].classList.remove('opoClick');
+    }
+    //////
     $('#messages').append($('<li>').text(rid));
     roomId = rid;//nagai:roomidは秘密にするもしくは推測不可能に。
     document.getElementById('waiting_disp').style.display = 'none';
@@ -244,6 +257,7 @@ function scoreProcess(points, endgame) {
         } else {
             document.getElementById('disp2').textContent = '敗北';
         }
+        document.getElementById('go_game').style.display = 'block';
     }
 }
 
