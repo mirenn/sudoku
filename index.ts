@@ -14,13 +14,17 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 const PORT = process.env.PORT || 3000;
 
+
 //現在の開示されている盤面情報オブジェクト:キーは座標。保持している情報は、id:socketid、もしくはどちらでもないなら'auto'。そのマスの見えている数字
 //誰が開いたかはこちらではsocketIDの情報として持たせる。
 interface board {
     [coordinate: string]: {//座標
-        id: string,//開いた人のid 自動:auto,まだ:mada,プレイヤー:userid
+        id: string,//当てた人のid 自動:auto,まだ:mada,プレイヤー:userId
         val: string,//見えている値
     }
+}
+interface points {
+    [matchUserId: string]: number
 }
 //どの部屋の盤面か
 interface roomDictionaryArray {
@@ -28,9 +32,11 @@ interface roomDictionaryArray {
     [rooms: string]: {
         board: board,
         answer: string,
-        points: any,//['points']['userid']ここに各点数が入っている。useridが最初からもてれるならこれでよかったが……、そうではなく初期化時どうしようもないので…空で宣言してからみたいな使い方になる
+        points: points,//['points']['それぞれのuserのid']ここに各点数が入っている。userIdが最初からもてれるならこれでよかったが……、そうではなく初期化時どうしようもないので…空で宣言してからみたいな使い方になる
         countdown: number,
-        logs: object[]
+        logs: object[],
+        isSelfPlay: boolean,
+        eachState: { [matchUserId: string]: { board: board, points: points } }//['それぞれのuserのid']ここに各userに配信するデータが入っている
     }
 }
 //どんどん溜まっていく一方なので定期的に削除したい。
@@ -41,10 +47,6 @@ let boards: roomDictionaryArray = {};
 app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
     next();
 })
-
-// app.listen(PORT, () => {
-//     console.log("Start on port 7000.")
-// })
 
 let roomNumber = 0;
 
@@ -70,31 +72,127 @@ io.on('connection', function (socket) {
 
     //リセット。もしだれもいない部屋の盤面があれば消しておく
     Object.keys(boards).forEach(rmkey => {
-        let rmclients = io.sockets.adapter.rooms.get(rmkey);
+        const rmclients = io.sockets.adapter.rooms.get(rmkey);
         const rmNumClients = rmclients ? rmclients.size : 0;
         console.log('nagai rmkey', rmkey, rmNumClients);
         if (rmNumClients === 0) {
             delete boards[rmkey];
         }
     });
+    //待機ルームに入る用
+    socket.on('gogame', function (data) {
+        const roomId = data['roomId'];
+        socket.data.userId = data['userId'];
+        socket.data.subUserId = data['subUserId'];
+        socket.data.matchUserId = data['userId'];
+        console.log('gogame', data, 'nagai', socket.data.userId);
+
+        //試合後などに再戦する場合、
+        //もともと入っていた部屋全てから抜ける
+        const rooms = Array.from(socket.rooms);
+        rooms.forEach(rm => {
+            if (rm !== socket.id) {
+                socket.leave(rm);
+            }
+        });
+
+        //console.log('nagai roomId', roomId, 'boards', boards);
+        //まず最初に中断した部屋がないか確認する
+        if (roomId && roomId in boards) {
+            //中断した部屋がまだ残っている場合、そこに参加する。
+            socket.leave('waitingroom');
+            socket.join(roomId);
+            socket.emit('match', roomId);
+            socket.emit("state", boards[roomId]['eachState'][socket.data.matchUserId]);
+        } else {
+            //中断した部屋がなく開始の場合
+            socket.join('waitingroom');
+            const clients = io.sockets.adapter.rooms.get('waitingroom');
+            console.log('待機ルームの人のIDのセット', clients);
+            //to get the number of clients in this room
+            const numClients = clients ? clients.size : 0;
+
+            if (numClients > 1 && clients) {
+                //nagaiもし同時にたくさん人きたら誰か同時に入ってしまいそうなので
+                //判定処理は入れる、その部屋に入っている人の数を取得する
+                const clientsArr = Array.from(clients);
+                //nagai:誰でも入れるので、roomIdは推測不能な文字列にして予防予定
+                const roomId = 'room' + String(roomNumber);
+                roomNumber = roomNumber + 1;//次はroom1になるように。
+
+                const cl0 = io.sockets.sockets.get(clientsArr[0]);
+                const cl1 = io.sockets.sockets.get(clientsArr[1]);
+                if (cl0 && cl1) {
+                    //待機ルームを抜けて対戦ルームに入る
+                    cl0.leave('waitingroom');
+                    cl1.leave('waitingroom');
+                    cl0.join(roomId);
+                    cl1.join(roomId);
+
+                    //マッチ
+                    //io.to(clientsArr[0]).emit('match', roomId);
+                    //io.to(clientsArr[1]).emit('match', roomId);
+                    cl0.emit('match', roomId);
+                    cl1.emit('match', roomId);
+
+                    if (cl0.data.userId === cl1.data.userId) {//同一ブラウザ同士の対決の場合
+                        cl0.data.matchUserId = cl0.data.subUserId;
+                        cl1.data.matchUserId = cl1.data.subUserId;
+                    }
+
+                    const rclients = io.sockets.adapter.rooms.get(roomId);
+                    console.log(roomId, 'ルームに入っている人のIDのSet', rclients);
+                    console.log('待機ルームの人のIDのSet', clients);
+                    const rnumClients = clients ? clients.size : 0;
+                    if (rnumClients > 2) {
+                        //もし同じ部屋に二人以上入ってしまっていたら解散（そんなことがあるか分からないが）
+                        cl0.leave(roomId);
+                        cl1.leave(roomId);
+                        cl0.join('waitingroom');
+                        cl1.join('waitingroom');
+                        console.log('解散', roomId, 'ルームの人のIDのセット', rclients);
+                        console.log('解散', '待機ルームの人のIDのセット', clients);
+                    } else {
+                        console.log('ゲーム開始');
+                        //正常に部屋が立ったなら
+                        //ゲームに必要な情報を作成する
+                        //盤面の正解の情報,現在の盤面の状態
+                        boards[roomId] = generateStartBoard(cl0.data.matchUserId, cl1.data.matchUserId);
+                        const state = (({ board, points }) => { return { board, points } })(boards[roomId]);
+                        io.to(roomId).emit("state", state);
+                        socket.data.readBoard = structuredClone(state['board']);
+                        const intervalid = setInterval(function () {
+                            boards[roomId]['countdown'] -= 1;
+                            io.to(roomId).emit("countdown", boards[roomId]['countdown']);
+                            if (boards[roomId]['countdown'] < 1) {
+                                clearInterval(intervalid);
+                            }
+                        }, 1000);
+                    }
+                }
+            }
+        }
+
+
+    });
 
     //クライアントから受けた数独提出答え受け取り用
     socket.on('submit', function (submitInfo) {
-        console.log('submitInfo: ' + submitInfo);
-        check(submitInfo);
+        console.log('submitInfo: ', submitInfo);
+        check(submitInfo, socket);
     });
     socket.on('myselect', function (data) {
         //自分が選択しているところの座標を相手にだけ送る
         //相手のsocketidに送る。
         const rooms = Array.from(socket.rooms);
-        let roomid = '';
+        let roomId = '';
         rooms.forEach(rm => {
             if (rm !== socket.id) {
-                roomid = rm;
+                roomId = rm;
             }
         });
         //相手にだけ送りたいときはbroadcastでできるらしいので実装変更
-        // const rclients = io.sockets.adapter.rooms.get(roomid);
+        // const rclients = io.sockets.adapter.rooms.get(roomId);
         // if (rclients) {
         //     const rclarray = Array.from(rclients);
         //     rclarray.forEach(rcl => {
@@ -103,7 +201,7 @@ io.on('connection', function (socket) {
         //         }
         //     });
         // }
-        socket.broadcast.to(roomid).emit('opponentSelect', data);
+        socket.broadcast.to(roomId).emit('opponentSelect', data);
     });
     //テスト クライアントチャット機能用
     socket.on('message', function (msg) {
@@ -118,89 +216,14 @@ io.on('connection', function (socket) {
         });
         //io.emit('message', msg);//ブロードキャスト
     });
-    //待機ルームに入る用
-    socket.on('gogame', function () {
-        console.log('gogame');
-        //試合後などに再戦する場合、
-        //もともと入っていた部屋全てから抜ける
-        const rooms = Array.from(socket.rooms);
-        let roomid = '';
-        rooms.forEach(rm => {
-            if (rm !== socket.id) {
-                socket.leave(rm);
-            }
-        });
 
-        socket.join('waitingroom');
-        const clients = io.sockets.adapter.rooms.get('waitingroom');
-        console.log('待機ルームの人のIDのセット', clients);
-        //to get the number of clients in this room
-        const numClients = clients ? clients.size : 0;
-
-        if (numClients > 1 && clients) {
-            //nagaiもし同時にたくさん人きたら誰か同時に入ってしまいそうなので
-            //判定処理は入れる、その部屋に入っている人の数を取得する
-            const clientsArr = Array.from(clients);
-            //nagai:誰でも入れるので、roomIdは推測不能な文字列にして予防予定
-            const roomId = 'room' + String(roomNumber);
-            roomNumber = roomNumber + 1;//次はroom1になるように。
-
-            const cl0 = io.sockets.sockets.get(clientsArr[0]);
-            const cl1 = io.sockets.sockets.get(clientsArr[1]);
-            if (cl0 && cl1) {
-                //待機ルームを抜けて対戦ルームに入る
-                cl0.leave('waitingroom');
-                cl1.leave('waitingroom');
-                cl0.join(roomId);
-                cl1.join(roomId);
-
-                //マッチ
-                //io.to(clientsArr[0]).emit('match', roomId);
-                //io.to(clientsArr[1]).emit('match', roomId);
-                cl0.emit('match', roomId);
-                cl1.emit('match', roomId);
-
-                const rclients = io.sockets.adapter.rooms.get(roomId);
-                console.log(roomId, 'ルームに入っている人のIDのSet', rclients);
-                console.log('待機ルームの人のIDのSet', clients);
-                const rnumClients = clients ? clients.size : 0;
-                if (rnumClients > 2) {
-                    //もし同じ部屋に二人以上入ってしまっていたら解散（そんなことがあるか分からないが）
-                    cl0.leave(roomId);
-                    cl1.leave(roomId);
-                    cl0.join('waitingroom');
-                    cl1.join('waitingroom');
-                    console.log('解散', roomId, 'ルームの人のIDのセット', rclients);
-                    console.log('解散', '待機ルームの人のIDのセット', clients);
-                } else {
-                    console.log('ゲーム開始');
-                    //正常に部屋が立ったなら
-                    //ゲームに必要な情報を作成する
-                    //盤面の正解の情報,現在の盤面の状態
-                    boards[roomId] = generateStartBoard();
-                    const state = (({ board, points }) => { return { board, points } })(boards[roomId])
-                    io.to(roomId).emit("state", JSON.stringify(state));
-                    const intervalid = setInterval(function () {
-                        boards[roomId]['countdown'] -= 1;
-                        io.to(roomId).emit("countdown", boards[roomId]['countdown']);
-                        if (boards[roomId]['countdown'] < 1) {
-                            clearInterval(intervalid);
-                        }
-                    }, 1000);
-                }
-                //参考:所属する部屋を取得できる
-                //ただし、自分自身のIDも部屋として取得されるのでそちらは無視する
-                //console.log('socket.roomsだよ', socket.rooms);
-            }
-        }
-    });
 });
 
 server.listen(PORT, function () {
     console.log('server listening. Port:' + PORT);
 });
 
-function generateStartBoard() {
+function generateStartBoard(userId1: string, userId2: string) {
     let problemnum = getRandomInt(500);
     let startboard = problemlines[problemnum];
     let answer = answerlines[problemnum];
@@ -223,21 +246,30 @@ function generateStartBoard() {
         board[coord] = { id: inid, val: inval };
     }
     //console.log('nagai start board', board);
-    return { board: board, answer: answer, points: {}, logs: [], countdown: 6 };
+    //nagai isSelfPlay
+    return {
+        board: board, answer: answer, points: { [userId1]: 0, [userId2]: 0 },
+        logs: [], countdown: 6, isSelfPlay: true,
+        eachState: {
+            [userId1]: { board: structuredClone(board), points: { [userId1]: 0, opponentguid: 0 } },
+            [userId2]: { board: structuredClone(board), points: { opponentguid: 0, [userId2]: 0 } }
+        }
+    };
 }
 
 // 正解判定
-function check(submitInfo: string) {
-    let subinfo = JSON.parse(submitInfo);//jsonparseは結構重い処理らしい
-    let usid = subinfo['userid'];
-    let rmid = subinfo['roomid'];
+// nagai適当なguidで提出されても通してしまうので、意図的に相手の点数を下げることはできてしまう
+function check(submitInfo: { userId: string, roomId: string, coordinate: string, val: string }, socket: socketio.Socket) {
+    let subinfo = submitInfo;
+    //let usid = subinfo['userId'];//送られてきたuserIdを使用するとまずいので
+    const usid = socket.data.matchUserId;
+    let rmid = subinfo['roomId'];
     let cod = subinfo['coordinate'];
     let val: string = subinfo['val'];
     let indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
-    if (!(usid in boards[rmid]['points'])) {
-        boards[rmid]['points'][usid] = 0;
-    }
-
+    // if (!(usid in boards[rmid]['points'])) {//nagai初期化時に作るようにしたのでこれは不要なはず
+    //     boards[rmid]['points'][usid] = 0;
+    // }
     if (boards[rmid]['countdown'] > 0) {
         console.log('カウントダウン中のため入力棄却');
     }
@@ -245,28 +277,78 @@ function check(submitInfo: string) {
     //deepcopyでないはずなのでこの時点で代入しておいてよいはず
     const state = (({ board, points }) => { return { board, points } })(boards[rmid]);
 
-    if (boards[rmid]['answer'][indx] == val && boards[rmid]['board'][cod]['val'] === '-') {
-        //まだ値が入っていないものに対してだけ
+    if (boards[rmid]['answer'][indx] === val && boards[rmid]['board'][cod]['val'] === '-') {//まだ値が入っていないものに対して
+        //正解の場合
         console.log('nagai 正解');
-        // 正解の場合 boards情報更新
         boards[rmid]['board'][cod]['val'] = val;
         boards[rmid]['board'][cod]['id'] = usid;
         boards[rmid]['points'][usid] += parseInt(val);
-        const event = { status: 'correct', userid: usid, val: val, coordinate: cod };
+        const event = { status: 'correct', userId: usid, val: val, coordinate: cod };
         boards[rmid]['logs'].push(event);
-        io.to(rmid).emit("event", JSON.stringify(event));
-        io.to(rmid).emit("state", JSON.stringify(state));
+        Object.keys(boards[rmid]['eachState']).forEach(uid => {//uidは自分か相手か
+            //console.log(boards[rmid]['eachState']);
+            //console.log('nagaikakuninn', uid);
+            boards[rmid]['eachState'][uid]['board'][cod]['val'] = val;
+            if (uid === socket.data.matchUserId) {
+                //自分の方のデータを更新する場合
+                boards[rmid]['eachState'][uid]['board'][cod]['id'] = uid;
+                boards[rmid]['eachState'][uid]['points'][uid] += parseInt(val);
+            } else {
+                //相手の方のデータを更新する場合(相手にとって、敵は自分……)
+                boards[rmid]['eachState'][uid]['board'][cod]['id'] = 'opponentguid';
+                boards[rmid]['eachState'][uid]['points']['opponentguid'] += parseInt(val);
+            }
+        });
+        const rmClients = io.sockets.adapter.rooms.get(rmid);
+        rmClients?.forEach(rmsocketid => {
+            const sock = io.sockets.sockets.get(rmsocketid);
+            if (sock?.data.matchUserId === usid) {
+                //回答提出者である自分に送る場合
+                io.to(rmsocketid).emit('event', { status: 'correct', userId: usid, val: val, coordinate: cod });
+                io.to(rmsocketid).emit("state", boards[rmid]['eachState'][sock?.data.matchUserId]);
+            } else {
+                //相手に送る場合
+                io.to(rmsocketid).emit('event', { status: 'correct', userId: 'opponentguid', val: val, coordinate: cod })
+                io.to(rmsocketid).emit("state", boards[rmid]['eachState'][sock?.data.matchUserId]);
+            }
+        });
+
+        //io.to(rmid).emit("event", event);
+        //io.to(rmid).emit("state", state);
     } else if (boards[rmid]['board'][cod]['val'] === '-') {
         console.log('nagai 不正解');
         //不正解の場合減点
         boards[rmid]['points'][usid] -= parseInt(val);
-        const event = { status: 'incorrect', userid: usid, val: val, coordinate: cod };
+        const event = { status: 'incorrect', userId: usid, val: val, coordinate: cod };
         boards[rmid]['logs'].push(event);
-        io.to(rmid).emit("event", JSON.stringify(event));
-        io.to(rmid).emit("state", JSON.stringify(state));
+
+        Object.keys(boards[rmid]['eachState']).forEach(uid => {//uidは自分か相手かのuserId
+            if (uid === socket.data.matchUserId) {
+                //自分の方のデータを更新する場合
+                boards[rmid]['eachState'][uid]['points'][uid] -= parseInt(val);
+            } else {
+                //相手の方のデータを更新する場合(相手にとって、敵は自分……)
+                boards[rmid]['eachState'][uid]['points']['opponentguid'] -= parseInt(val);
+            }
+        });
+        const rmClients = io.sockets.adapter.rooms.get(rmid);
+        rmClients?.forEach(rmsocketid => {
+            const sock = io.sockets.sockets.get(rmsocketid);
+            if (sock?.data.matchUserId === usid) {
+                //回答提出者である自分に送る場合
+                io.to(rmsocketid).emit('event', { status: 'incorrect', userId: usid, val: val, coordinate: cod });
+                io.to(rmsocketid).emit("state", boards[rmid]['eachState'][sock?.data.matchUserId]);
+            } else {
+                //相手に送る場合
+                io.to(rmsocketid).emit('event', { status: 'incorrect', userId: 'opponentguid', val: val, coordinate: cod })
+                io.to(rmsocketid).emit("state", boards[rmid]['eachState'][sock?.data.matchUserId]);
+            }
+        });
+        // io.to(rmid).emit("event", event);
+        // io.to(rmid).emit("state", state);
     }
 
-    // 終了検知//これは少し遅いがとはいえたかが81なので
+    // 終了検知
     let endgame = true;
     //console.log('nagai 最終確認', boards[rmid]['board']);
     Object.keys(boards[rmid]['board']).forEach(key => {

@@ -1,19 +1,20 @@
 //ユーザーIDを適当に発行する
-//とりあえず一意でありさえすればよい
-//localstorageに持たせる予定だが、同じブラウザで開かれると同一のユーザーID同士の対決になり困る
-//テストのために同ブラウザアクセスの対決は許可したいのでsessionstorageに……。
-
-//let userid = localStorage.getItem('userid');
-let userid = null;
-if (!userid) {
+//userIdは対戦ごとに毎回発行する。
+//nagai：自分同士の対戦はできるように維持したい・・・
+let userId = localStorage.getItem('userId');
+//let userId = self.crypto.randomUUID();
+if (!userId) {
     //httpsでしか使えないようなのでこけてたらそれをまず疑う
-    userid = self.crypto.randomUUID();
-    //localStorage.setItem('userid', userid);
+    userId = self.crypto.randomUUID();
+    localStorage.setItem('userId', userId);
 }
-console.log('nagai userid', userid);
+console.log('nagai userId', userId);
+//同じブラウザ自分同士対戦用
+const subUserId = self.crypto.randomUUID();
 
-//部屋ID
-let roomId = '';
+//部屋ID //途中で切断しても戻れるように
+let roomId = localStorage.getItem('roomId');
+
 //state情報を一応持つ。
 //ただし、意味は開始時点はnullであることを判定に使っているだけで保存した盤面情報は特に使用しない
 let state = null;
@@ -30,7 +31,7 @@ let countdown = 0;
 render_empty_board();
 
 var socketio = io();
-//接続待ち
+//接続したらとりあえず状態を取る
 socketio.on('connectnum', function (num) {
     $('#waiting_num').text('現在の総接続人数' + num);
 });
@@ -40,20 +41,21 @@ socketio.on('match', function (rid) {
     state = null;//初期化
     /////色をつけるクラスはずして初期化
     const opoele = document.getElementsByClassName('opponent');
-    while(opoele.length){
+    while (opoele.length) {
         opoele[0].classList.remove('opponent');
     }
-    const ownele = document.getElementsByClassName('own'); 
-    while(ownele.length){
+    const ownele = document.getElementsByClassName('own');
+    while (ownele.length) {
         ownele[0].classList.remove('own');
-    }    
-    const opocliele = document.getElementsByClassName('opoClick'); 
-    while(opocliele.length){
+    }
+    const opocliele = document.getElementsByClassName('opoClick');
+    while (opocliele.length) {
         opocliele[0].classList.remove('opoClick');
     }
     //////
     $('#messages').append($('<li>').text(rid));
-    roomId = rid;//nagai:roomidは秘密にするもしくは推測不可能に。
+    roomId = rid;//nagai:roomIdは秘密にするもしくは推測不可能に。
+    localStorage.setItem('roomId', roomId);
     document.getElementById('waiting_disp').style.display = 'none';
     document.getElementById('waiting_num').style.display = 'none';
 });
@@ -93,8 +95,8 @@ socketio.on('opponentSelect', function (data) {
 //ゲームのイベント
 socketio.on('event', function (data) {
     //今は文字を画面に表示しているだけなので文字列で送ってくるだけで良い……。
-    const eventData = JSON.parse(data);
-    const who = eventData.userid === userid ? 'あなた' : '相手';
+    const eventData = data;
+    const who = (eventData.userId === userId || eventData.userId === subUserId) ? 'あなた' : '相手';
     const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
     const seigo = eventData.status === 'correct' ? '正解' : '不正解';
     const nyuuryoku = eventData.val;
@@ -109,7 +111,7 @@ socketio.on('event', function (data) {
 //現在見えている盤面と相違があるデータを取得した瞬間に色をつける
 socketio.on("state", function (data) {
     //json形式（通信量的に無駄は多いし、json.parseなどは重いので余裕があったら変更する）
-    state = JSON.parse(data);
+    state = data;
     //console.log('nagai state', state);
 
     let bData = state['board'];
@@ -122,7 +124,7 @@ socketio.on("state", function (data) {
             //値に変更があった場合、値をセットする
             if (document.getElementById(bkey).textContent != bData[bkey].val) {
                 document.getElementById(bkey).textContent = bData[bkey].val;
-                if (bData[bkey].id === userid) {
+                if (bData[bkey].id === userId || bData[bkey].id === subUserId) {
                     //classをつける
                     document.getElementById(bkey).classList.add('own');
                 } else if (bData[bkey].id !== 'auto' && bData[bkey].id !== 'mada') {
@@ -136,6 +138,11 @@ socketio.on("state", function (data) {
     }
     //checkPoint();
     scoreProcess(points, endgame);
+});
+//接続エラー時のイベントらしい
+socketio.on("error", (error) => {
+    // ...
+    console.log('nagai error テスト確認');
 });
 
 // クリックされた要素を保持
@@ -161,12 +168,13 @@ function render_empty_board() {
     }
 }
 
+//ゲーム開始、待機画面に遷移
 let button = document.getElementById('go_game');
 button.onclick = goGameButtonClick;
 function goGameButtonClick(e) {
     document.getElementById('waiting_disp').style.display = 'flex';
     document.getElementById('go_game').style.display = 'none';
-    socketio.emit("gogame");
+    socketio.emit("gogame", { roomId: roomId, userId: userId, subUserId: subUserId });
 }
 
 
@@ -206,9 +214,9 @@ function selectClick(e) {
             if (datas[i].querySelectorAll("td")[j].classList.contains("mainClick")) {
                 let cd = String(i) + String(j);
                 //送信処理//答え送信
-                let submitInfo = { userid: userid, roomid: roomId, coordinate: cd, val: e.target.textContent };
+                let submitInfo = { roomId: roomId, coordinate: cd, val: e.target.textContent };
                 console.log('nagai submitInfo', submitInfo);//nagai 連打対策はしておいた方がよさそう
-                socketio.emit('submit', JSON.stringify(submitInfo));
+                socketio.emit('submit', submitInfo);
             }
         }
     }
@@ -236,11 +244,11 @@ function checkPoint() {
 function scoreProcess(points, endgame) {
     let mypoint = 0;
     let opopoint = 0;
-    Object.keys(points).forEach(key => {
-        if (key === userid) {
-            mypoint = points[key];
+    Object.keys(points).forEach(uid => {
+        if (uid === userId || uid === subUserId) {
+            mypoint = points[uid];
         } else {
-            opopoint = points[key];
+            opopoint = points[uid];
         }
     });
     document.getElementById("point_1").textContent = mypoint;
@@ -257,6 +265,10 @@ function scoreProcess(points, endgame) {
         } else {
             document.getElementById('disp2').textContent = '敗北';
         }
+        //roomId初期化
+        localStorage.removeItem('roomId');
+        roomId = null;//nagai本当にこれで良いか？
+
         document.getElementById('go_game').style.display = 'block';
     }
 }

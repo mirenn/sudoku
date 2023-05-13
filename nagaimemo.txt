@@ -7,6 +7,7 @@ npm run build
 mv .\dist\index.js ./
 Compress-Archive -Path * -DestinationPath nodeserver.zip
 az webapp deploy --resource-group nagairesource --name sudokunagai --src-path C:\Users\ngihy\Desktop\nodeserver\nodeserver.zip
+↑uploadscript.ps1で全て実行できる。
 
 実行コマンド↓
 npx ts-node index.ts(今はnpm run startで動くようにしている)
@@ -20,12 +21,19 @@ https://projects.lukehaas.me/css-loaders/
 数独自動生成
 https://github.com/timedia/puzzle-generator
 
-
+実装済み
+・useridをsocket.dataに紐づける
+　・もし同一userid同士の対決であれば、subuseridを用いるゲームモードにする。
+再接続用の処理
+　・roomIDを投げてログインしにいく
+　・同じブラウザ同士時は再接続はまともに機能しない。これをどうこうするのは無駄に面倒なので
 
 メモ
 //・連打制限?（前の入力から0.1秒以上は開けるようにする）
 
-・レート計算＝＞適当に画面側で固定の数値足したり引いたり
+useridを
+レート計算＝＞適当に画面側で固定の数値足したり引いたり
+まず、planet scaleのDBに接続できることの確認
 
 ネットワーク例外処理周り
 ・相手がいなくなったときの処理
@@ -41,3 +49,8 @@ CREATE TABLE `users` (
   `name` varchar(24) NOT NULL,
   `rate` INT
 );
+
+と、していたがplanet searchDBに接続するにはplanet search cliという
+ソフトが必要で、、コンテナにそれをインストールすることができない以上無理。
+したがって、azureのDBを使う方法を模索する
+https://learn.microsoft.com/ja-jp/azure/cosmos-db/nosql/tutorial-nodejs-web-app
