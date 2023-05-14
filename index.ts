@@ -41,7 +41,6 @@ const PORT = process.env.PORT || 3000;
 
 // Provide required connection from environment variables
 const key = String(process.env.COSMOS_KEY);
-//const keynagainotinisakuzyo
 const endpoint = String(process.env.COSMOS_ENDPOINT);
 // Set Database name and container name with unique timestamp
 const databaseName = `users`;

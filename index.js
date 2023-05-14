@@ -28,10 +28,7 @@ app.use(express_1.default.urlencoded({ extended: true }));
 const PORT = process.env.PORT || 3000;
 // Provide required connection from environment variables
 const key = String(process.env.COSMOS_KEY);
-//const keynagainotinisakuzyo
-// Endpoint format: https://YOUR-RESOURCE-NAME.documents.azure.com:443/
 const endpoint = String(process.env.COSMOS_ENDPOINT);
-//const endpoint =  "https://suudokunagai.documents.azure.com:443/";
 // Set Database name and container name with unique timestamp
 const databaseName = `users`;
 const containerName = `products`;
