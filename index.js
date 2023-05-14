@@ -17,6 +17,7 @@ const socket_io_1 = __importDefault(require("socket.io"));
 const http_1 = __importDefault(require("http"));
 const fs_1 = __importDefault(require("fs"));
 const cosmos_1 = require("@azure/cosmos");
+const crypto_1 = __importDefault(require("crypto"));
 let answertext = fs_1.default.readFileSync("./answer.txt");
 let astxt = answertext.toString();
 let answerlines = astxt.split('\n');
@@ -54,7 +55,6 @@ function main() {
         app.use((req, res, next) => {
             next();
         });
-        let roomNumber = 0;
         //一覧取得
         //app.get('/', express.static('public'));
         app.use('/', express_1.default.static('public'));
@@ -74,8 +74,8 @@ function main() {
             Object.keys(boards).forEach(rmkey => {
                 const rmclients = io.sockets.adapter.rooms.get(rmkey);
                 const rmNumClients = rmclients ? rmclients.size : 0;
-                console.log('nagai rmkey', rmkey, rmNumClients);
                 if (rmNumClients === 0) {
+                    console.log('誰も入っていない部屋のため削除 ルーム:', rmkey);
                     delete boards[rmkey];
                 }
             });
@@ -85,7 +85,7 @@ function main() {
                 socket.data.userId = data['userId'];
                 socket.data.subUserId = data['subUserId'];
                 socket.data.matchUserId = data['userId'];
-                console.log('gogame', data, 'nagai', socket.data.userId);
+                console.log('gogame', data);
                 // (async () => {
                 //     const querySpec = {
                 //         query: "select userId,name,rate from users where users.userId=@userId",
@@ -116,7 +116,6 @@ function main() {
                         socket.leave(rm);
                     }
                 });
-                //console.log('nagai roomId', roomId, 'boards', boards);
                 //まず最初に中断した部屋がないか確認する
                 if (roomId && roomId in boards) {
                     //中断した部屋がまだ残っている場合、そこに参加する。
@@ -137,8 +136,7 @@ function main() {
                         //判定処理は入れる、その部屋に入っている人の数を取得する
                         const clientsArr = Array.from(clients);
                         //nagai:誰でも入れるので、roomIdは推測不能な文字列にして予防予定
-                        const roomId = 'room' + String(roomNumber);
-                        roomNumber = roomNumber + 1; //次はroom1になるように。
+                        const roomId = crypto_1.default.randomUUID();
                         const cl0 = io.sockets.sockets.get(clientsArr[0]);
                         const cl1 = io.sockets.sockets.get(clientsArr[1]);
                         if (cl0 && cl1) {
@@ -157,7 +155,7 @@ function main() {
                                 cl1.data.matchUserId = cl1.data.subUserId;
                             }
                             const rclients = io.sockets.adapter.rooms.get(roomId);
-                            console.log(roomId, 'ルームに入っている人のIDのSet', rclients);
+                            console.log('ルーム:', roomId, 'に入っている人のIDのSet', rclients);
                             console.log('待機ルームの人のIDのSet', clients);
                             const rnumClients = clients ? clients.size : 0;
                             if (rnumClients > 2) {
@@ -166,7 +164,7 @@ function main() {
                                 cl1.leave(roomId);
                                 cl0.join('waitingroom');
                                 cl1.join('waitingroom');
-                                console.log('解散', roomId, 'ルームの人のIDのセット', rclients);
+                                console.log('解散 ルーム:', roomId, 'の人のIDのセット', rclients);
                                 console.log('解散', '待機ルームの人のIDのセット', clients);
                             }
                             else {
@@ -239,8 +237,8 @@ function main() {
             let startboard = problemlines[problemnum];
             let answer = answerlines[problemnum];
             const asarray = answer.match(/.{9}/g);
-            const askakigyo = asarray === null || asarray === void 0 ? void 0 : asarray.join('\n');
-            console.log(askakigyo);
+            const askaigyo = asarray === null || asarray === void 0 ? void 0 : asarray.join('\n');
+            console.log(askaigyo); //デバッグで自分で入力するとき用
             //console.log(answer);
             const board = {};
             // 通常のfor文で行う
@@ -286,7 +284,7 @@ function main() {
             const state = (({ board, points }) => { return { board, points }; })(boards[rmid]);
             if (boards[rmid]['answer'][indx] === val && boards[rmid]['board'][cod]['val'] === '-') { //まだ値が入っていないものに対して
                 //正解の場合
-                console.log('nagai 正解');
+                console.log('正解');
                 boards[rmid]['board'][cod]['val'] = val;
                 boards[rmid]['board'][cod]['id'] = usid;
                 boards[rmid]['points'][usid] += parseInt(val);
@@ -325,7 +323,7 @@ function main() {
                 //io.to(rmid).emit("state", state);
             }
             else if (boards[rmid]['board'][cod]['val'] === '-') {
-                console.log('nagai 不正解');
+                console.log('不正解');
                 //不正解の場合減点
                 boards[rmid]['points'][usid] -= parseInt(val);
                 const event = { status: 'incorrect', userId: usid, val: val, coordinate: cod };
@@ -359,13 +357,13 @@ function main() {
             }
             // 終了検知
             let endgame = true;
-            //console.log('nagai 最終確認', boards[rmid]['board']);
             Object.keys(boards[rmid]['board']).forEach(key => {
                 if (boards[rmid]['board'][key]['val'] === '-') {
                     endgame = false;
                 } //nagai foreachを途中でやめることはできないらしい……無駄すぎるがとりあえず
             });
             if (endgame === true) {
+                console.log('ルーム:', rmid, 'のゲーム終了');
                 //面倒なのでとりあえず画面側でstateから判定してもらう
                 //終了したなら配列から盤面を消してしまう（終了通知なども必要）
                 delete boards[rmid];
