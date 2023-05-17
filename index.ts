@@ -59,9 +59,6 @@ const partitionKeyPath = ["/pk"];//categoryId
 //部屋ごとの盤面情報保持
 let boards: roomDictionaryArray = {};
 
-//全てのユーザーのuserId,name,rate
-//（cosmosDBが使いにくいのでDBから全て取得してメモリに持つ）
-//let usersCosmos = {};
 
 async function main() {
     // Authenticate to Azure Cosmos DB
@@ -94,13 +91,15 @@ async function main() {
     };
     // Get items 
     try {
+        //cosmosDBが使いにくいので都度問い合わせるのでなく、
+        //ランキング情報全て取得しておいてメモリに持った情報を参照する。更新は都度更新しにいく
         let { resources } = await container.items.query(querySpec).fetchAll();
+        console.log('cosmosDB Data:', resources);
         //配列のままだと使いにくいので、id(userID)をキーにしたオブジェクトに
         var usersCosmos = resources.reduce((acc, item) => {
             acc[item['id']] = item;
             return acc;
         }, {});
-        console.log('cosmosDB Data:', resources);
     } catch (error) {
         console.log(error);
         var usersCosmos: any = {};
@@ -344,8 +343,11 @@ async function main() {
         };
     }
 
-    // 正解判定
-    // nagai適当なguidで提出されても通してしまうので、意図的に相手の点数を下げることはできてしまう
+    /**
+     * 提出された回答を判定して、二人のユーザーに結果送信
+     * @param submitInfo 
+     * @param socket 
+     */
     function check(submitInfo: { userId: string, roomId: string, coordinate: string, val: string }, socket: socketio.Socket) {
         let subinfo = submitInfo;
         //let usid = subinfo['userId'];//送られてきたuserIdを使用するとまずいので
