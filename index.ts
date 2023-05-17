@@ -36,6 +36,10 @@ interface roomDictionaryArray {
         eachState: { [matchUserId: string]: { board: board, points: points } }//['それぞれのuserのid']ここに各userに配信するデータが入っている
     }
 }
+/**
+ * cosmosDBからとってきてメモリに保持する情報
+ */
+interface usersCosmosDB { [id: string]: { pk: string, id: string, rate: number, name: string } }
 
 let answertext = fs.readFileSync("./answer.txt");
 let astxt = answertext.toString();
@@ -96,13 +100,13 @@ async function main() {
         let { resources } = await container.items.query(querySpec).fetchAll();
         console.log('cosmosDB Data:', resources);
         //配列のままだと使いにくいので、id(userID)をキーにしたオブジェクトに
-        var usersCosmos = resources.reduce((acc, item) => {
+        var usersCosmos:usersCosmosDB = resources.reduce((acc, item) => {
             acc[item['id']] = item;
             return acc;
         }, {});
     } catch (error) {
         console.log(error);
-        var usersCosmos: any = {};
+        var usersCosmos: usersCosmosDB = {};
     }
 
     //CROS対応
