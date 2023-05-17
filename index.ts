@@ -7,27 +7,34 @@ import crypto from 'crypto'
 import { userInfo } from 'os';
 import { rawListeners } from 'process';
 
-//現在の開示されている盤面情報オブジェクト:キーは座標。保持している情報は、id:socketid、もしくはどちらでもないなら'auto'。そのマスの見えている数字
-//誰が開いたかはこちらではsocketIDの情報として持たせる。
+
+/**
+ * 現在の数独魔法陣盤面情報（見えている盤面）
+ */
 interface board {
     [coordinate: string]: {//座標
         id: string,//当てた人のid 自動:auto,まだ:mada,プレイヤー:userId
         val: string,//見えている値
     }
 }
+/**
+ * 部屋に入っている二人のポイントを入れるオブジェクト用
+ */
 interface points {
     [matchUserId: string]: number
 }
-//どの部屋の盤面か
+/**
+ * 部屋ごとのゲーム情報を管理するオブジェクト用
+ */
 interface roomDictionaryArray {
     // (文字型のキー):  string
     [rooms: string]: {
         board: board,
-        answer: string,
+        answer: string,//その部屋の魔法陣の正解情報
         points: points,//['points']['それぞれのuserのid']ここに各点数が入っている。userIdが最初からもてれるならこれでよかったが……、そうではなく初期化時どうしようもないので…空で宣言してからみたいな使い方になる
-        countdown: number,
-        logs: object[],
-        isSelfPlay: boolean,
+        countdown: number,//ゲーム開始時のカウントダウンの残り秒数。
+        logs: object[],//提出された情報の正解、不正解などの操作情報ログ
+        isSelfPlay: boolean,//同じブラウザ同士の対戦かどうかのフラグ（使っていたか？)
         eachState: { [matchUserId: string]: { board: board, points: points } }//['それぞれのuserのid']ここに各userに配信するデータが入っている
     }
 }
@@ -107,7 +114,6 @@ async function main() {
     });
 
     //一覧取得
-    //app.get('/', express.static('public'));
     app.use('/', express.static('public'));
     // ディレクトリでindex.htmlをリク・レス
     // app.get('/', (req, res) => {
@@ -166,8 +172,6 @@ async function main() {
                 usersCosmos[socket.data.userId]['name'] = data['name'].substr(0, 24);
             }
 
-            //nagai ユーザーに取得、もしくは生成したレートを返す
-            //socket.emit('');
             //試合後などに再戦する場合、
             //もともと入っていた部屋全てから抜ける
             const rooms = Array.from(socket.rooms);
@@ -196,7 +200,7 @@ async function main() {
                     //nagaiもし同時にたくさん人きたら誰か同時に入ってしまいそうなので
                     //判定処理は入れる、その部屋に入っている人の数を取得する
                     const clientsArr = Array.from(clients);
-                    //nagai:誰でも入れるので、roomIdは推測不能な文字列にして予防予定
+                    //idさえ分かれば誰でも入れるので、roomIdは推測不能な文字列に
                     const roomId = crypto.randomUUID();
 
                     const cl0 = io.sockets.sockets.get(clientsArr[0]);
@@ -301,15 +305,20 @@ async function main() {
     server.listen(PORT, function () {
         console.log('server listening. Port:' + PORT);
     });
-
+    /**
+     * 新しく作られた部屋のゲーム情報を生成する
+     * 魔法陣の正解情報、現在の盤面など
+     * @param userId1 
+     * @param userId2 
+     * @returns 
+     */
     function generateStartBoard(userId1: string, userId2: string) {
         let problemnum = getRandomInt(500);
         let startboard = problemlines[problemnum];
         let answer = answerlines[problemnum];
         const asarray = answer.match(/.{9}/g);
         const askaigyo = asarray?.join('\n');
-        console.log(askaigyo);//デバッグで自分で入力するとき用
-        //console.log(answer);
+        console.log(askaigyo);//デバッグで自分で入力するとき用に魔法陣の答え出力
 
         const board: board = {};
         // 通常のfor文で行う
@@ -439,8 +448,8 @@ async function main() {
             //面倒なのでとりあえず画面側でstateから判定してもらう
             //終了したなら配列から盤面を消してしまう（終了通知なども必要）
             (async () => {
-                //非同期でレートを更新する。メモリに持っているCosmosのオブジェクトを更新、CosmosDBを更新
-                //自分のidと相手のidの2要素入っているだけ、のはずなので
+                //非同期でレートを更新する。
+                //部屋に入っている二人のユーザーに対してメモリに持っているCosmosのオブジェクトを更新、CosmosDBを更新
                 const matchUserIDs = Object.keys(boards[rmid]['points']);
                 const user1Id = matchUserIDs[0];
                 const user2Id = matchUserIDs[1];
@@ -485,14 +494,11 @@ async function main() {
                 delete boards[rmid];
             })();
         }
-        //nagai ここらへんでレート送る
     }
 
     function getRandomInt(max: number) {
         return Math.floor(Math.random() * max);
     }
-
-
 
 }
 main().catch(e => { console.log(e); });
