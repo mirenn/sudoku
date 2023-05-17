@@ -41,6 +41,7 @@ interface roomDictionaryArray {
  */
 interface usersCosmosDB { [id: string]: { pk: string, id: string, rate: number, name: string } }
 
+//数独の問題と答えのセットを生成
 let answertext = fs.readFileSync("./answer.txt");
 let astxt = answertext.toString();
 let answerlines = astxt.split('\n');
@@ -52,19 +53,18 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 const PORT = process.env.PORT || 3000;
 
-// Provide required connection from environment variables
-const key = String(process.env.COSMOS_KEY);
-const endpoint = String(process.env.COSMOS_ENDPOINT);
-// Set Database name and container name with unique timestamp
-const databaseName = `users`;
-const containerName = `products`;
-const partitionKeyPath = ["/pk"];//categoryId
-
 //部屋ごとの盤面情報保持
 let boards: roomDictionaryArray = {};
 
-
 async function main() {
+    //AzureDB接続
+    // Provide required connection from environment variables
+    const key = String(process.env.COSMOS_KEY);
+    const endpoint = String(process.env.COSMOS_ENDPOINT);
+    // Set Database name and container name with unique timestamp
+    const databaseName = `users`;
+    const containerName = `products`;
+    const partitionKeyPath = ["/pk"];//categoryId
     // Authenticate to Azure Cosmos DB
     const cosmosClient = new CosmosClient({ endpoint, key });
     const { database } = await cosmosClient.databases.createIfNotExists({ id: databaseName });
@@ -100,7 +100,7 @@ async function main() {
         let { resources } = await container.items.query(querySpec).fetchAll();
         console.log('cosmosDB Data:', resources);
         //配列のままだと使いにくいので、id(userID)をキーにしたオブジェクトに
-        var usersCosmos:usersCosmosDB = resources.reduce((acc, item) => {
+        var usersCosmos: usersCosmosDB = resources.reduce((acc, item) => {
             acc[item['id']] = item;
             return acc;
         }, {});

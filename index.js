@@ -18,6 +18,7 @@ const http_1 = __importDefault(require("http"));
 const fs_1 = __importDefault(require("fs"));
 const cosmos_1 = require("@azure/cosmos");
 const crypto_1 = __importDefault(require("crypto"));
+//数独の問題と答えのセットを生成
 let answertext = fs_1.default.readFileSync("./answer.txt");
 let astxt = answertext.toString();
 let answerlines = astxt.split('\n');
@@ -27,17 +28,18 @@ const app = (0, express_1.default)();
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 const PORT = process.env.PORT || 3000;
-// Provide required connection from environment variables
-const key = String(process.env.COSMOS_KEY);
-const endpoint = String(process.env.COSMOS_ENDPOINT);
-// Set Database name and container name with unique timestamp
-const databaseName = `users`;
-const containerName = `products`;
-const partitionKeyPath = ["/pk"]; //categoryId
 //部屋ごとの盤面情報保持
 let boards = {};
 function main() {
     return __awaiter(this, void 0, void 0, function* () {
+        //AzureDB接続用の情報
+        // Provide required connection from environment variables
+        const key = String(process.env.COSMOS_KEY);
+        const endpoint = String(process.env.COSMOS_ENDPOINT);
+        // Set Database name and container name with unique timestamp
+        const databaseName = `users`;
+        const containerName = `products`;
+        const partitionKeyPath = ["/pk"]; //categoryId
         // Authenticate to Azure Cosmos DB
         const cosmosClient = new cosmos_1.CosmosClient({ endpoint, key });
         const { database } = yield cosmosClient.databases.createIfNotExists({ id: databaseName });
