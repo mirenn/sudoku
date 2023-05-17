@@ -1,7 +1,7 @@
 //ユーザーIDを適当に発行する
 //userIdは対戦ごとに毎回発行する。
 //nagai：自分同士の対戦はできるように維持したい・・・
-let userId = localStorage.getItem('userId');
+var userId = localStorage.getItem('userId');
 //let userId = self.crypto.randomUUID();
 if (!userId) {
     //httpsでしか使えないようなのでこけてたらそれをまず疑う
@@ -9,22 +9,32 @@ if (!userId) {
     localStorage.setItem('userId', userId);
 }
 console.log('nagai userId', userId);
-//同じブラウザ自分同士対戦用
-const subUserId = self.crypto.randomUUID();
 
 //部屋ID //途中で切断しても戻れるように
 let roomId = localStorage.getItem('roomId');
+//レート
+let rate = localStorage.getItem('rate');
+
+const input = document.getElementById('nick');
+let ncname = localStorage.getItem('name');
+console.log('nagai name', ncname);
+if (ncname) {
+    input.value = ncname;
+}
+input.addEventListener('input', (event) => {
+    localStorage.setItem('name', event.target.value);
+});
+
+let ranking;
+
+//同じブラウザ自分同士対戦用
+const subUserId = self.crypto.randomUUID();
 
 //state情報を一応持つ。
 //ただし、意味は開始時点はnullであることを判定に使っているだけで保存した盤面情報は特に使用しない
 let state = null;
 
-//レート(ブラウザごとにひとつ)
-let rate = localStorage.getItem('rate');
-if (!rate) {
-    rate = 1500;
-    localStorage.setItem('rate', rate);
-}
+
 //0でないと数独の答え提出処理は走らない
 let countdown = 0;
 //空の数独マスにイベント追加
@@ -35,6 +45,40 @@ var socketio = io();
 socketio.on('connectnum', function (num) {
     $('#waiting_num').text('現在の総接続人数' + num);
 });
+
+socketio.emit('requestranking', userId);
+socketio.on('ranking', function (data) {
+    //$('#waiting_num').text('現在の総接続人数' + num);
+    ranking = data;
+    console.log('nagai ranking', ranking);
+    ranking.sort((a, b) => b.rate - a.rate);
+    const rankingTextarea = document.getElementById('ranking');
+    let txt = '';
+    ranking.forEach(({ name, rate, userId }, index) => {
+        console.log('nagai windowuserid', window.userId);
+        const rank = getRank(rate);
+        if (userId === window.userId) {
+            txt += `順位${index + 1}位 名前${name}(あなた) レート${rate} ランク${rank}\n`;
+        } else {
+            txt += `順位${index + 1}位 名前${name} レート${rate} ランク${rank}\n`;
+        }
+    });
+    rankingTextarea.value = txt;
+});
+function getRank(rate) {
+    if (rate < 1500) {
+        return "アイアン";
+    }
+    else if (rate >= 1500 && rate < 1600) {
+        return "ブロンズ";
+    } else if (rate >= 1600 && rate < 1700) {
+        return "シルバー";
+    } else if (rate >= 1700 && rate < 1800) {
+        return "ゴールド";
+    } else {
+        return "プラチナ";
+    }
+}
 
 //マッチしたとき
 socketio.on('match', function (rid) {
@@ -174,7 +218,7 @@ button.onclick = goGameButtonClick;
 function goGameButtonClick(e) {
     document.getElementById('waiting_disp').style.display = 'flex';
     document.getElementById('go_game').style.display = 'none';
-    socketio.emit("gogame", { roomId: roomId, userId: userId, subUserId: subUserId, name: document.getElementById('nick').textContent });
+    socketio.emit("gogame", { roomId: roomId, userId: userId, subUserId: subUserId, name: document.getElementById('nick').value });
 }
 
 

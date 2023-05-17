@@ -33,10 +33,12 @@ const endpoint = String(process.env.COSMOS_ENDPOINT);
 // Set Database name and container name with unique timestamp
 const databaseName = `users`;
 const containerName = `products`;
-const partitionKeyPath = ["/categoryId"];
-//どんどん溜まっていく一方なので定期的に削除したい。
-//その実装はめちゃくちゃナイーブでとりあえず良く
+const partitionKeyPath = ["/pk"]; //categoryId
+//部屋ごとの盤面情報保持
 let boards = {};
+//全てのユーザーのuserId,name,rate
+//（cosmosDBが使いにくいのでDBから全て取得してメモリに持つ）
+//let usersCosmos = {};
 function main() {
     return __awaiter(this, void 0, void 0, function* () {
         // Authenticate to Azure Cosmos DB
@@ -50,7 +52,37 @@ function main() {
                 paths: partitionKeyPath
             }
         });
+        //データが何一つないときは以下ソースでINSERT
+        // const items = [
+        //     {
+        //         "pk": "A",
+        //         "id": '838c8664-f99c-4d03-a90b-3935944005c4',
+        //         "name": 'nagainame',
+        //         "rate": 1500
+        //     }];
+        // Create all items
+        // for (const item of items) {
+        //     const { resource } = await container.items.create(item);
+        //     console.log(resource, ' inserted');
+        // }
         console.log(`${container.id} container ready`);
+        const querySpec = {
+            query: "select u.pk,u.id,u.rate,u.name from users u"
+        };
+        // Get items 
+        try {
+            let { resources } = yield container.items.query(querySpec).fetchAll();
+            //配列のままだと使いにくいので、id(userID)をキーにしたオブジェクトに
+            var usersCosmos = resources.reduce((acc, item) => {
+                acc[item['id']] = item;
+                return acc;
+            }, {});
+            console.log('cosmosDB Data:', resources);
+        }
+        catch (error) {
+            console.log(error);
+            var usersCosmos = {};
+        }
         //CROS対応
         app.use((req, res, next) => {
             next();
@@ -79,6 +111,20 @@ function main() {
                     delete boards[rmkey];
                 }
             });
+            //ランキングを返す
+            socket.on('requestranking', function (usid) {
+                //socket.dataにまだusid入っていなくても良いように引数にusid
+                const ranking = Object.values(usersCosmos);
+                const rk = ranking.map(value => {
+                    if (value.id === usid) {
+                        return { userId: value.id, rate: value.rate, name: value.name };
+                    }
+                    else {
+                        return { userId: 'othersid', rate: value.rate, name: value.name };
+                    }
+                });
+                socket.emit('ranking', rk);
+            });
             //待機ルームに入る用
             socket.on('gogame', function (data) {
                 const roomId = data['roomId'];
@@ -86,28 +132,19 @@ function main() {
                 socket.data.subUserId = data['subUserId'];
                 socket.data.matchUserId = data['userId'];
                 console.log('gogame', data);
-                // (async () => {
-                //     const querySpec = {
-                //         query: "select userId,name,rate from users where users.userId=@userId",
-                //         parameters: [
-                //             {
-                //                 name: "@userId",
-                //                 value: socket.data.userId
-                //             }
-                //         ]
-                //     };
-                //     // Get items 
-                //     const { resources } = await container.items.query(querySpec).fetchAll();
-                //     for (const item of resources) {
-                //         //結果は一つだけ
-                //         console.log(`${item.usrId}: ${item.name}, ${item.rate}`);
-                //     }
-                //     if(resources.length === 0){
-                //         //初めてなのでデータを挿入する。
-                //         //nagai koko 画面側でuseridを入れれる箇所を作る、go_gameのdataにnameを含める
-                //     }
-                //     //nagai ユーザーに取得、もしくは生成したレートを返す
-                // })();
+                if (!(socket.data.userId in usersCosmos)) {
+                    usersCosmos[socket.data.userId] = {
+                        "id": socket.data.userId,
+                        "name": data['name'].substr(0, 24),
+                        "rate": 1500
+                    };
+                }
+                else {
+                    //名前だけ更新
+                    usersCosmos[socket.data.userId]['name'] = data['name'].substr(0, 24);
+                }
+                //nagai ユーザーに取得、もしくは生成したレートを返す
+                //socket.emit('');
                 //試合後などに再戦する場合、
                 //もともと入っていた部屋全てから抜ける
                 const rooms = Array.from(socket.rooms);
@@ -366,8 +403,57 @@ function main() {
                 console.log('ルーム:', rmid, 'のゲーム終了');
                 //面倒なのでとりあえず画面側でstateから判定してもらう
                 //終了したなら配列から盤面を消してしまう（終了通知なども必要）
-                delete boards[rmid];
+                (() => __awaiter(this, void 0, void 0, function* () {
+                    //非同期でレートを更新する。メモリに持っているCosmosのオブジェクトを更新、CosmosDBを更新
+                    //自分のidと相手のidの2要素入っているだけ、のはずなので
+                    const matchUserIDs = Object.keys(boards[rmid]['points']);
+                    const user1Id = matchUserIDs[0];
+                    const user2Id = matchUserIDs[1];
+                    console.log('nagai', user1Id, user2Id);
+                    const rmClients = io.sockets.adapter.rooms.get(rmid);
+                    rmClients === null || rmClients === void 0 ? void 0 : rmClients.forEach(rmsocketid => {
+                        const sock = io.sockets.sockets.get(rmsocketid);
+                        console.log('nagai sock id', sock === null || sock === void 0 ? void 0 : sock.data.userId);
+                        if ((sock === null || sock === void 0 ? void 0 : sock.data.userId) === user1Id) {
+                            const diffrate = boards[rmid]['points'][user1Id] - boards[rmid]['points'][user2Id];
+                            usersCosmos[user1Id]['rate'] += diffrate;
+                            const ranking = Object.values(usersCosmos);
+                            const rk = ranking.map(value => {
+                                if (value.id === user1Id) {
+                                    return { userId: value.id, rate: value.rate, name: value.name };
+                                }
+                                else {
+                                    return { userId: 'othersId', rate: value.rate, name: value.name };
+                                }
+                            });
+                            sock.emit('ranking', rk);
+                        }
+                        else if ((sock === null || sock === void 0 ? void 0 : sock.data.userId) === user2Id) {
+                            const diffrate = boards[rmid]['points'][user2Id] - boards[rmid]['points'][user1Id];
+                            usersCosmos[user2Id]['rate'] += diffrate;
+                            const ranking = Object.values(usersCosmos);
+                            const rk = ranking.map(value => {
+                                if (value.id === user2Id) {
+                                    return { userId: value.id, rate: value.rate, name: value.name };
+                                }
+                                else {
+                                    return { userId: 'othersId', rate: value.rate, name: value.name };
+                                }
+                            });
+                            sock.emit('ranking', rk);
+                        }
+                    });
+                    try {
+                        yield container.items.upsert(usersCosmos[user1Id]);
+                        yield container.items.upsert(usersCosmos[user2Id]);
+                    }
+                    catch (error) {
+                        console.error(error);
+                    }
+                    delete boards[rmid];
+                }))();
             }
+            //nagai ここらへんでレート送る
         }
         function getRandomInt(max) {
             return Math.floor(Math.random() * max);

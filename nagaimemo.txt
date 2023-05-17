@@ -11,7 +11,6 @@ az webapp deploy --resource-group nagairesource --name sudokunagai --src-path C:
 
 実行コマンド↓
 npx ts-node index.ts(今はnpm run startで動くようにしている)
-
 ↓答えを作るコマンドは確か以下のような感じ。旧PCのwsl2上で実行（powershellだとどうしても出力をテキストファイルに出せなかった）
 java -jar NP.jar -s .\data\Problem500.txt
 
