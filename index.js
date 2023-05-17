@@ -88,7 +88,6 @@ function main() {
             next();
         });
         //一覧取得
-        //app.get('/', express.static('public'));
         app.use('/', express_1.default.static('public'));
         // ディレクトリでindex.htmlをリク・レス
         // app.get('/', (req, res) => {
@@ -134,6 +133,7 @@ function main() {
                 console.log('gogame', data);
                 if (!(socket.data.userId in usersCosmos)) {
                     usersCosmos[socket.data.userId] = {
+                        "pk": "A",
                         "id": socket.data.userId,
                         "name": data['name'].substr(0, 24),
                         "rate": 1500
@@ -143,8 +143,6 @@ function main() {
                     //名前だけ更新
                     usersCosmos[socket.data.userId]['name'] = data['name'].substr(0, 24);
                 }
-                //nagai ユーザーに取得、もしくは生成したレートを返す
-                //socket.emit('');
                 //試合後などに再戦する場合、
                 //もともと入っていた部屋全てから抜ける
                 const rooms = Array.from(socket.rooms);
@@ -172,7 +170,7 @@ function main() {
                         //nagaiもし同時にたくさん人きたら誰か同時に入ってしまいそうなので
                         //判定処理は入れる、その部屋に入っている人の数を取得する
                         const clientsArr = Array.from(clients);
-                        //nagai:誰でも入れるので、roomIdは推測不能な文字列にして予防予定
+                        //idさえ分かれば誰でも入れるので、roomIdは推測不能な文字列に
                         const roomId = crypto_1.default.randomUUID();
                         const cl0 = io.sockets.sockets.get(clientsArr[0]);
                         const cl1 = io.sockets.sockets.get(clientsArr[1]);
@@ -269,14 +267,20 @@ function main() {
         server.listen(PORT, function () {
             console.log('server listening. Port:' + PORT);
         });
+        /**
+         * 新しく作られた部屋のゲーム情報を生成する
+         * 魔法陣の正解情報、現在の盤面など
+         * @param userId1
+         * @param userId2
+         * @returns
+         */
         function generateStartBoard(userId1, userId2) {
             let problemnum = getRandomInt(500);
             let startboard = problemlines[problemnum];
             let answer = answerlines[problemnum];
             const asarray = answer.match(/.{9}/g);
             const askaigyo = asarray === null || asarray === void 0 ? void 0 : asarray.join('\n');
-            console.log(askaigyo); //デバッグで自分で入力するとき用
-            //console.log(answer);
+            console.log(askaigyo); //デバッグで自分で入力するとき用に魔法陣の答え出力
             const board = {};
             // 通常のfor文で行う
             for (var i = 0; i < 81; i++) {
@@ -404,8 +408,8 @@ function main() {
                 //面倒なのでとりあえず画面側でstateから判定してもらう
                 //終了したなら配列から盤面を消してしまう（終了通知なども必要）
                 (() => __awaiter(this, void 0, void 0, function* () {
-                    //非同期でレートを更新する。メモリに持っているCosmosのオブジェクトを更新、CosmosDBを更新
-                    //自分のidと相手のidの2要素入っているだけ、のはずなので
+                    //非同期でレートを更新する。
+                    //部屋に入っている二人のユーザーに対してメモリに持っているCosmosのオブジェクトを更新、CosmosDBを更新
                     const matchUserIDs = Object.keys(boards[rmid]['points']);
                     const user1Id = matchUserIDs[0];
                     const user2Id = matchUserIDs[1];
@@ -453,7 +457,6 @@ function main() {
                     delete boards[rmid];
                 }))();
             }
-            //nagai ここらへんでレート送る
         }
         function getRandomInt(max) {
             return Math.floor(Math.random() * max);

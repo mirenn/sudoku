@@ -4,8 +4,6 @@ import http, { IncomingMessage, ServerResponse } from 'http'
 import fs from 'fs'
 import { CosmosClient } from "@azure/cosmos";
 import crypto from 'crypto'
-import { userInfo } from 'os';
-import { rawListeners } from 'process';
 
 
 /**
@@ -163,7 +161,8 @@ async function main() {
 
             if (!(socket.data.userId in usersCosmos)) {
                 usersCosmos[socket.data.userId] = {
-                    "id": socket.data.userId,
+                    "pk": "A",//必要。pkとユニークキーがないとcosmosDBはindexが効かない。
+                    "id": socket.data.userId,//ユニークキー
                     "name": data['name'].substr(0, 24),//不正に長い文字を投げられても制限する。
                     "rate": 1500
                 };
