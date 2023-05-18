@@ -12,13 +12,13 @@
   <main>
     <h1 id="midasi">数独 バトル</h1>
     <h2 id="waiting_num"></h2>
-    <input id="nick" style="width: 220px; height: 24px;" placeholder="Nickname" maxlength="24">
-    <button id = "go_game">オンライン対戦する</button>
-    <div id = "waiting_disp">
+    <input id="nick" placeholder="Nickname" maxlength="24">
+    <button id="go_game">Play Online</button>
+    <div id="waiting_disp">
       <h2 id="waiting">対戦待ち接続中</h2>
       <div class="loader"></div>
     </div>
-    <h2 id = "disp2"></h2>
+    <h2 id="disp2"></h2>
     <table id="main" class="main">
       <tr>
         <td id="00" class="clickenable"></td>
@@ -141,15 +141,13 @@
       <div class="remove display-none" onclick="remove()">もう一度対戦する</div>
     </div>
     <textarea id="log" readonly></textarea>
+    <ul id="messages"></ul>
+    <form id="message_form" action="#">
+      <input id="input_msg" autocomplete="off" /><button>Send</button>
+    </form>
+    <textarea id="ranking" style="width: 400px; height: 100px;"></textarea>
   </main>
-  <ul id="messages"></ul>
-  <form id="message_form" action="#">
-    <input id="input_msg" autocomplete="off" /><button>Send</button>
-  </form>
-  <textarea id="ranking" style="width: 400px; height: 100px;"></textarea>
   <script type="text/javascript" src="main.js"></script>
-  <script>
-  </script>
 </body>
 
 </html>

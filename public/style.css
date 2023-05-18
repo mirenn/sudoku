@@ -3,7 +3,7 @@
 }
 
 main {
-    width: 500px;
+    width: 450px;
     margin: auto;
     user-select: none;
 }
@@ -18,6 +18,8 @@ main {
 
 table {
     border-collapse: collapse;
+    text-align: center;
+    margin: auto;
 }
 
 .main {
@@ -28,7 +30,21 @@ table {
     background-color: #f3ece3;
 } */
 
+#nick {
+    display: block;
+    margin-bottom: 10px;
+    text-align: center;
+    margin: auto;
+    height: 24px; 
+}
 
+#go_game {
+    display: block;
+    text-align: center;
+    margin: auto;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
 
 .main td {
     border: 1px solid #6091d3;
@@ -39,7 +55,8 @@ table {
     position: relative;
 }
 
-.main td:hover:not(.mainClick) {/*クリックしたらホバークラスはつけない*/
+.main td:hover:not(.mainClick) {
+    /*クリックしたらホバークラスはつけない*/
     background-color: #cee8ce;
 }
 
@@ -51,7 +68,7 @@ table {
     background-color: #f5d1fb;
 }
 
-.opoClick{
+.opoClick {
     background-color: #d5bdd9;
 }
 
@@ -165,7 +182,8 @@ table {
     height: 50px;
     font-size: x-large;
 }
-#go_game{
+
+#go_game {
     font-size: x-large;
 }
 
