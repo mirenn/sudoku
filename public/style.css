@@ -29,21 +29,25 @@ table {
 /*横方向のhover .main tr:hover {
     background-color: #f3ece3;
 } */
-
+#midasi{
+    text-align:center;
+}
+#waiting{
+    text-align:center;
+}
 #nick {
-    display: block;
-    margin-bottom: 10px;
-    text-align: center;
+    /*display: block;*/
     margin: auto;
     height: 24px; 
 }
 
 #go_game {
-    display: block;
+    /*display: block;*/
     text-align: center;
     margin: auto;
     margin-top: 10px;
     margin-bottom: 10px;
+    font-size: x-large;
 }
 
 .main td {
@@ -165,8 +169,11 @@ table {
 
 #waiting_disp {
     display: none;
-    /*justify-content: center;*/
+    /*display: flex;*/
+    justify-content: center;
     align-items: center;
+    margin-top: 10px;
+    margin-bottom: 10px;
 }
 
 #waiting {
@@ -178,13 +185,18 @@ table {
 }
 
 #log {
-    width: 405px;
+    width: inherit;
     height: 50px;
     font-size: x-large;
+    margin: auto;
+    display: block;
 }
 
-#go_game {
-    font-size: x-large;
+#ranking{
+    width: inherit;
+    margin: auto;
+    display: block;
+    height: 100px;
 }
 
 /*以下くるくる*/
