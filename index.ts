@@ -130,7 +130,7 @@ async function main() {
         // may or may not be similar to the count of Socket instances in the main namespace, depending on your usage
         //const count2 = io.of("/").sockets.size;
 
-        io.to('waitingroom').emit('connectnum', count);
+        io.emit('connectnum', count);
 
         //リセット。もしだれもいない部屋の盤面があれば消しておく
         Object.keys(boards).forEach(rmkey => {

@@ -43,27 +43,43 @@ render_empty_board();
 var socketio = io();
 //接続したらとりあえず状態を取る
 socketio.on('connectnum', function (num) {
-    $('#waiting_num').text('現在の総接続人数' + num);
+    console.log('nagai num', num);
+    document.getElementById('waiting_num').textContent = '現在の総接続人数' + num;
 });
 
 socketio.emit('requestranking', userId);
 socketio.on('ranking', function (data) {
-    //$('#waiting_num').text('現在の総接続人数' + num);
     ranking = data;
     console.log('nagai ranking', ranking);
     ranking.sort((a, b) => b.rate - a.rate);
-    const rankingTextarea = document.getElementById('ranking');
-    let txt = '';
+
+    const rankingTable = document.getElementById('ranking');
+    const mytbody = document.createElement("tbody");
     ranking.forEach(({ name, rate, userId }, index) => {
-        console.log('nagai windowuserid', window.userId);
+        const mytr = document.createElement("tr");
+        const myth = document.createElement("th");
+        const mytd1 = document.createElement("td");
+        const mytd2 = document.createElement("td");
+        const mytd3 = document.createElement("td");
+
         const rank = getRank(rate);
-        if (userId === window.userId) {
-            txt += `順位${index + 1}位 名前${name}(あなた) レート${rate} ランク${rank}\n`;
-        } else {
-            txt += `順位${index + 1}位 名前${name} レート${rate} ランク${rank}\n`;
-        }
+        myth.textContent = index + 1;
+        mytd1.textContent = (userId === window.userId) ? name + '（あなた）' : name;
+        mytd2.textContent = rate;
+        mytd3.textContent = rank;
+
+        mytr.appendChild(myth);
+        mytr.appendChild(mytd1);
+        mytr.appendChild(mytd2);
+        mytr.appendChild(mytd3);
+        mytbody.appendChild(mytr);
     });
-    rankingTextarea.value = txt;
+    const oldtbody = rankingTable.getElementsByTagName("tbody")[0];
+    if (oldtbody) {
+        rankingTable.removeChild(oldtbody);
+    }
+    //rankingTable.replaceChild(mytbody, oldtbody);
+    rankingTable.appendChild(mytbody);
 });
 function getRank(rate) {
     if (rate < 1500) {
@@ -97,11 +113,20 @@ socketio.on('match', function (rid) {
         opocliele[0].classList.remove('opoClick');
     }
     //////
-    $('#messages').append($('<li>').text(rid));
-    roomId = rid;//nagai:roomIdは秘密にするもしくは推測不可能に。
+    roomId = rid;
     localStorage.setItem('roomId', roomId);
+    //表示非表示
     document.getElementById('waiting_disp').style.display = 'none';
     document.getElementById('waiting_num').style.display = 'none';
+    document.getElementById('log').style.display = 'block';
+    document.getElementById('chat').style.display = 'block';
+    document.getElementById('scoreboard').style.display = 'block';
+    
+    //チャットクリア
+    const list = document.getElementById("messages");
+    while (list.firstChild) {
+        list.removeChild(list.firstChild);
+    }
 });
 //マッチ後のカウントダウン
 socketio.on('countdown', function (num) {
@@ -321,7 +346,8 @@ function scoreProcess(points, endgame) {
 function check(i, j, value) {
     // 終了検知
     if (!questionCheck.flat().includes(0)) {
-        document.getElementsByClassName("remove")[0].classList.remove("display-none");
+        //document.getElementsByClassName("remove")[0].classList.remove("display-none");
+        document.getElementById('replay').style.display = 'block';
     }
 
 }
@@ -340,7 +366,8 @@ function remove() {
             }
         }
     }
-    document.getElementsByClassName("remove")[0].classList.add("display-none");
+    //document.getElementsByClassName("remove")[0].classList.add("display-none");
+    document.getElementById('replay').style.display = 'none';
     // スコアの初期化
     point_1 = 0
     point_2 = 0

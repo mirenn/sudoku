@@ -32,7 +32,7 @@ const PORT = process.env.PORT || 3000;
 let boards = {};
 function main() {
     return __awaiter(this, void 0, void 0, function* () {
-        //AzureDB接続用の情報
+        //AzureDB接続
         // Provide required connection from environment variables
         const key = String(process.env.COSMOS_KEY);
         const endpoint = String(process.env.COSMOS_ENDPOINT);
@@ -101,7 +101,7 @@ function main() {
             const count = io.engine.clientsCount;
             // may or may not be similar to the count of Socket instances in the main namespace, depending on your usage
             //const count2 = io.of("/").sockets.size;
-            io.to('waitingroom').emit('connectnum', count);
+            io.emit('connectnum', count);
             //リセット。もしだれもいない部屋の盤面があれば消しておく
             Object.keys(boards).forEach(rmkey => {
                 const rmclients = io.sockets.adapter.rooms.get(rmkey);
