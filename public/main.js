@@ -30,17 +30,64 @@ let ranking;
 //同じブラウザ自分同士対戦用
 const subUserId = self.crypto.randomUUID();
 
-//state情報を一応持つ。
-//ただし、意味は開始時点はnullであることを判定に使っているだけで保存した盤面情報は特に使用しない
+/*state情報を一応持つ。
+ただし、保存した盤面情報は特に使用しない
+*/
 let state = null;
 
+var socketio = io();
 
 //0でないと数独の答え提出処理は走らない
 let countdown = 0;
 //空の数独マスにイベント追加
 render_empty_board();
 
-var socketio = io();
+/**
+ * 一人用ゲームフラグ
+ * Trueの場合、一人用数独を遊ぶ
+ */
+singlePlayFlag = true;
+let singlePlayState = JSON.parse(localStorage.getItem('singlePlayState'));
+console.log('nagai singleplaystate', singlePlayState);
+if (singlePlayState) {//保存されているものがあるのならそれを使用する
+    //盤面終了していないか確認
+    let s_endgame = true;
+    Object.keys(singlePlayState['board']).forEach(key => {
+        if (singlePlayState['board'][key]['val'] === '-') {
+            s_endgame = false;
+        }
+    });
+    if (s_endgame) {
+        socketio.emit('requestsingleplay');
+    } else {
+        for (let i = 0; i < 9; i++) {
+            for (let j = 0; j < 9; j++) {
+                let bkey = String(i) + String(j);
+                document.getElementById(bkey).textContent = singlePlayState['board'][bkey].val;
+            }
+        }
+    }
+} else {
+    for (let i = 0; i < 9; i++) {
+        socketio.emit('requestsingleplay');
+    }
+}
+//一人用の場合
+socketio.on('singleplay', function (data) {
+    console.log('nagai 一人用の場合のデータ', data);
+    singlePlayState = data;
+    localStorage.setItem('singlePlayState', JSON.stringify(singlePlayState));
+
+    if (singlePlayFlag) {
+        for (let i = 0; i < 9; i++) {
+            for (let j = 0; j < 9; j++) {
+                let bkey = String(i) + String(j);
+                document.getElementById(bkey).textContent = singlePlayState['board'][bkey].val;
+            }
+        }
+    }
+});
+
 //接続したらとりあえず状態を取る
 socketio.on('connectnum', function (num) {
     console.log('nagai num', num);
@@ -81,6 +128,7 @@ socketio.on('ranking', function (data) {
     //rankingTable.replaceChild(mytbody, oldtbody);
     rankingTable.appendChild(mytbody);
 });
+
 function getRank(rate) {
     if (rate < 1500) {
         return "アイアン";
@@ -91,13 +139,26 @@ function getRank(rate) {
         return "シルバー";
     } else if (rate >= 1700 && rate < 1800) {
         return "ゴールド";
-    } else {
+    } else if (rate >= 1800 && rate < 1900) {
         return "プラチナ";
+    }
+    else if (rate >= 1900 && rate < 2000) {
+        return "ダイヤモンド";
+    }
+    else if (rate >= 2000 && rate < 2100) {
+        return "マスター";
+    }
+    else if (rate >= 2100 && rate < 2200) {
+        return "グランドマスター";
+    } else {
+        //本当は上位100名のみ
+        return "チャレンジャー";
     }
 }
 
 //マッチしたとき
 socketio.on('match', function (rid) {
+    singlePlayFlag = false;
     state = null;//初期化
     /////色をつけるクラスはずして初期化
     const opoele = document.getElementsByClassName('opponent');
@@ -121,7 +182,7 @@ socketio.on('match', function (rid) {
     document.getElementById('log').style.display = 'block';
     document.getElementById('chat').style.display = 'block';
     document.getElementById('scoreboard').style.display = 'block';
-    
+
     //チャットクリア
     const list = document.getElementById("messages");
     while (list.firstChild) {
@@ -133,7 +194,7 @@ socketio.on('countdown', function (num) {
     countdown = num;
     $('#disp2').text('マッチしました。あと' + String(num) + '秒で開始します。');
     if (num < 1) {
-        $('#disp2').text('開始');
+        $('#disp2').text('Start');
         $(".numbutton").removeClass("glayout");
     } else {
         $(".numbutton").addClass("glayout");
@@ -205,7 +266,6 @@ socketio.on("state", function (data) {
             }
         }
     }
-    //checkPoint();
     scoreProcess(points, endgame);
 });
 //接続エラー時のイベントらしい
@@ -246,7 +306,6 @@ function goGameButtonClick(e) {
     socketio.emit("gogame", { roomId: roomId, userId: userId, subUserId: subUserId, name: document.getElementById('nick').value });
 }
 
-
 // 問題パネルのマスが押された時の処理
 // mainClickクラスを一か所につける
 //ただし、つけているところをクリックしたら消せる
@@ -275,20 +334,51 @@ function mainClick(e) {
 // 数字選択のマスが押された時の処理
 function selectClick(e) {
     console.log('nagai select click');
-    if (countdown > 0) return;//カウントダウン中に押してもすぐ終了
-    if (document.getElementsByClassName("mainClick")[0] === undefined || document.getElementsByClassName("mainClick")[0].textContent != "-") { return; }
-    let datas = document.getElementById("main").querySelectorAll("tr");
-    for (let i = 0; i < datas.length; i++) {
-        for (let j = 0; j < datas[i].querySelectorAll("td").length; j++) {
-            if (datas[i].querySelectorAll("td")[j].classList.contains("mainClick")) {
-                let cd = String(i) + String(j);
-                //送信処理//答え送信
-                let submitInfo = { roomId: roomId, coordinate: cd, val: e.target.textContent };
-                console.log('nagai submitInfo', submitInfo);//nagai 連打対策はしておいた方がよさそう
-                socketio.emit('submit', submitInfo);
+    if (singlePlayFlag) {
+        if (document.getElementsByClassName("mainClick")[0] === undefined || document.getElementsByClassName("mainClick")[0].textContent != "-") { return; }
+        let datas = document.getElementById("main").querySelectorAll("tr");
+        outer_loop: for (let i = 0; i < datas.length; i++) {
+            for (let j = 0; j < datas[i].querySelectorAll("td").length; j++) {
+                if (datas[i].querySelectorAll("td")[j].classList.contains("mainClick")) {
+                    const id = String(i) + String(j);
+                    if (e.target.textContent === singlePlayState['answer'][i * 9 + j]) {
+                        //正解の場合
+                        document.getElementById(id).textContent = e.target.textContent;
+                        singlePlayState['board'][id]['val'] = e.target.textContent;
+                        localStorage.setItem('singlePlayState', JSON.stringify(singlePlayState));
+                    }
+                    break outer_loop;
+                }
+            }
+        }
+        let s_endgame = true;
+        Object.keys(singlePlayState['board']).forEach(key => {
+            if (singlePlayState['board'][key]['val'] === '-') {
+                s_endgame = false;
+            }
+        });
+        if (s_endgame) {
+            socketio.emit('requestsingleplay');
+        }
+    } else {
+        if (countdown > 0) return;//カウントダウン中に押してもすぐ終了
+        if (document.getElementsByClassName("mainClick")[0] === undefined || document.getElementsByClassName("mainClick")[0].textContent != "-") { return; }
+        let datas = document.getElementById("main").querySelectorAll("tr");
+        //for文回さなくても選択しているマスはclassで分かるのでそのうち書き換える……
+        outer_loop: for (let i = 0; i < datas.length; i++) {
+            for (let j = 0; j < datas[i].querySelectorAll("td").length; j++) {
+                if (datas[i].querySelectorAll("td")[j].classList.contains("mainClick")) {
+                    let cd = String(i) + String(j);
+                    //送信処理//答え送信
+                    let submitInfo = { roomId: roomId, coordinate: cd, val: e.target.textContent };
+                    console.log('nagai submitInfo', submitInfo);//nagai 連打対策はしておいた方がよさそう
+                    socketio.emit('submit', submitInfo);
+                    break outer_loop;
+                }
             }
         }
     }
+
 }
 
 // htmlから点数判定。使わない予定
@@ -328,11 +418,11 @@ function scoreProcess(points, endgame) {
         txarea.value += 'ゲーム終了' + "\n";
         txarea.scrollTop = txarea.scrollHeight;
         if (mypoint > opopoint) {//nagai numberのはずなのでこの比較であっているはず
-            document.getElementById('disp2').textContent = '勝利!!!!!';
+            document.getElementById('disp2').textContent = 'Win!!!';
         } else if (mypoint === opopoint) {
-            document.getElementById('disp2').textContent = '引き分け!';
+            document.getElementById('disp2').textContent = 'Draw!';
         } else {
-            document.getElementById('disp2').textContent = '敗北';
+            document.getElementById('disp2').textContent = 'Lose';
         }
         //roomId初期化
         localStorage.removeItem('roomId');
@@ -340,40 +430,4 @@ function scoreProcess(points, endgame) {
 
         document.getElementById('go_game').style.display = 'block';
     }
-}
-
-// 正解判定
-function check(i, j, value) {
-    // 終了検知
-    if (!questionCheck.flat().includes(0)) {
-        //document.getElementsByClassName("remove")[0].classList.remove("display-none");
-        document.getElementById('replay').style.display = 'block';
-    }
-
-}
-
-//消す処理
-function remove() {
-    let datas = document.getElementById("main").querySelectorAll("tr");
-    for (let i = 0; i < datas.length; i++) {
-        for (let j = 0; j < datas[i].querySelectorAll("td").length; j++) {
-            if (question[i][j] != 0) {
-                datas[i].querySelectorAll("td")[j].textContent = question[i][j];
-                datas[i].querySelectorAll("td")[j].classList.add("clickdisable");
-            } else {
-                datas[i].querySelectorAll("td")[j].textContent = null;
-                datas[i].querySelectorAll("td")[j].classList.add("clickenable");
-            }
-        }
-    }
-    //document.getElementsByClassName("remove")[0].classList.add("display-none");
-    document.getElementById('replay').style.display = 'none';
-    // スコアの初期化
-    point_1 = 0
-    point_2 = 0
-
-    document.getElementById("point_1").textContent = point_1;
-    document.getElementById("point_2").textContent = point_2;
-
-    questionCheck = question;
 }

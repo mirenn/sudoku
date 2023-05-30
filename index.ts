@@ -154,6 +154,30 @@ async function main() {
             });
             socket.emit('ranking', rk);
         });
+        //
+        socket.on('requestsingleplay', function () {
+            const problemnum = getRandomInt(500);
+            const startboard = problemlines[problemnum];
+            const answer = answerlines[problemnum];
+
+            let sboard: board = {};
+            // 通常のfor文で行う
+            for (var i = 0; i < 81; i++) {
+                let syou = Math.floor(i / 9);
+                let mod = i % 9;
+                let coord = String(syou) + String(mod);
+                let inval = startboard[i];
+                let inid = 'auto';
+                if (inval === '-') {
+                    inid = 'mada';
+                }
+                sboard[coord] = { id: inid, val: inval };
+            }
+            let singleObject = { 'board': sboard, 'answer': answer };
+
+            socket.emit('singleplay', singleObject);
+        });
+
         //待機ルームに入る用
         socket.on('gogame', function (data) {
             const roomId = data['roomId'];
