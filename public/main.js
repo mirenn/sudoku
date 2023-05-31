@@ -8,7 +8,6 @@ if (!userId) {
     userId = self.crypto.randomUUID();
     localStorage.setItem('userId', userId);
 }
-console.log('nagai userId', userId);
 
 //部屋ID //途中で切断しても戻れるように
 let roomId = localStorage.getItem('roomId');
@@ -17,7 +16,6 @@ let rate = localStorage.getItem('rate');
 
 const input = document.getElementById('nick');
 let ncname = localStorage.getItem('name');
-console.log('nagai name', ncname);
 if (ncname) {
     input.value = ncname;
 }
@@ -131,28 +129,28 @@ socketio.on('ranking', function (data) {
 
 function getRank(rate) {
     if (rate < 1500) {
-        return "アイアン";
+        return "Iron";
     }
     else if (rate >= 1500 && rate < 1600) {
-        return "ブロンズ";
+        return "Bronze";
     } else if (rate >= 1600 && rate < 1700) {
-        return "シルバー";
+        return "Silver";
     } else if (rate >= 1700 && rate < 1800) {
-        return "ゴールド";
+        return "Gold";
     } else if (rate >= 1800 && rate < 1900) {
-        return "プラチナ";
+        return "Platinum";
     }
     else if (rate >= 1900 && rate < 2000) {
-        return "ダイヤモンド";
+        return "Diamond";
     }
     else if (rate >= 2000 && rate < 2100) {
-        return "マスター";
+        return "Master";
     }
     else if (rate >= 2100 && rate < 2200) {
-        return "グランドマスター";
+        return "Grandmaster";
     } else {
         //本当は上位100名のみ
-        return "チャレンジャー";
+        return "Challenger";
     }
 }
 
@@ -223,9 +221,16 @@ socketio.on('opponentSelect', function (data) {
     }
 });
 //ゲームのイベント
-socketio.on('event', function (data) {
+socketio.on('event', function (eventData) {
+    if (eventData.status === 'incorrect' && (eventData.userId === userId || eventData.userId === subUserId)) {
+        //自分が不正解だった場合
+        const image = document.getElementById("closeicon");
+        image.style.display = "block";
+        setTimeout(function () {
+            image.style.display = "none";
+        }, 300);
+    }
     //今は文字を画面に表示しているだけなので文字列で送ってくるだけで良い……。
-    const eventData = data;
     const who = (eventData.userId === userId || eventData.userId === subUserId) ? 'あなた' : '相手';
     const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
     const seigo = eventData.status === 'correct' ? '正解' : '不正解';
@@ -327,7 +332,6 @@ function mainClick(e) {
 
     place = e.target;
     place.classList.add('mainClick');
-    console.log('nagai targetmainclick', e.target.id);
     socketio.emit("myselect", e.target.id);
 }
 
@@ -337,6 +341,7 @@ function selectClick(e) {
     if (singlePlayFlag) {
         if (document.getElementsByClassName("mainClick")[0] === undefined || document.getElementsByClassName("mainClick")[0].textContent != "-") { return; }
         let datas = document.getElementById("main").querySelectorAll("tr");
+        //本当は二重ループ回す必要ない
         outer_loop: for (let i = 0; i < datas.length; i++) {
             for (let j = 0; j < datas[i].querySelectorAll("td").length; j++) {
                 if (datas[i].querySelectorAll("td")[j].classList.contains("mainClick")) {
@@ -346,6 +351,13 @@ function selectClick(e) {
                         document.getElementById(id).textContent = e.target.textContent;
                         singlePlayState['board'][id]['val'] = e.target.textContent;
                         localStorage.setItem('singlePlayState', JSON.stringify(singlePlayState));
+                    } else {
+                        //不正解の場合
+                        const image = document.getElementById("closeicon");
+                        image.style.display = "block";
+                        setTimeout(function () {
+                            image.style.display = "none";
+                        }, 300);
                     }
                     break outer_loop;
                 }
@@ -379,24 +391,6 @@ function selectClick(e) {
         }
     }
 
-}
-
-// htmlから点数判定。使わない予定
-function checkPoint() {
-    let mypoint = 0;
-    let opopoint = 0;
-    let mytargets = document.getElementsByClassName("own");
-    for (let i = 0; i < mytargets.length; i++) {
-        //console.log(targets[i].textContent);
-        mypoint += parseInt(mytargets[i].textContent);
-    }
-    let opotargets = document.getElementsByClassName("opponent");
-    for (let i = 0; i < opotargets.length; i++) {
-        opopoint += parseInt(opotargets[i].textContent);
-    }
-    //console.log(mypoint,opopoint);
-    document.getElementById("point_1").textContent = mypoint;
-    document.getElementById("point_2").textContent = opopoint;
 }
 
 // 点数処理

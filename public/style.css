@@ -183,7 +183,7 @@ table {
     display: none;
 }
 
-#scoreboard,#replay,#chat{
+#scoreboard,#replay,#chat,#closeicon{
     display: none;
 }
 
