@@ -11,8 +11,6 @@ if (!userId) {
 
 //部屋ID //途中で切断しても戻れるように
 let roomId = localStorage.getItem('roomId');
-//レート
-let rate = localStorage.getItem('rate');
 
 const input = document.getElementById('nick');
 let ncname = localStorage.getItem('name');
@@ -44,7 +42,7 @@ render_empty_board();
  * 一人用ゲームフラグ
  * Trueの場合、一人用数独を遊ぶ
  */
-singlePlayFlag = true;
+let singlePlayFlag = true;
 let singlePlayState = JSON.parse(localStorage.getItem('singlePlayState'));
 console.log('nagai singleplaystate', singlePlayState);
 if (singlePlayState) {//保存されているものがあるのならそれを使用する

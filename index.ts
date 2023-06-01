@@ -1,6 +1,6 @@
 import express from 'express';
 import socketio from 'socket.io';
-import http, { IncomingMessage, ServerResponse } from 'http'
+import http from 'http'
 import fs from 'fs'
 import { CosmosClient } from "@azure/cosmos";
 import crypto from 'crypto'
@@ -42,11 +42,11 @@ interface roomDictionaryArray {
 interface usersCosmosDB { [id: string]: { pk: string, id: string, rate: number, name: string } }
 
 //数独の問題と答えのセットを生成
-let answertext = fs.readFileSync("./answer.txt");
-let astxt = answertext.toString();
-let answerlines = astxt.split('\n');
-let problemtext = fs.readFileSync("./problem.txt", 'utf8');
-let problemlines = problemtext.toString().split('\n');
+const answertext = fs.readFileSync("./answer.txt");
+const astxt = answertext.toString();
+const answerlines = astxt.split('\n');
+const problemtext = fs.readFileSync("./problem.txt", 'utf8');
+const problemlines = problemtext.toString().split('\n');
 
 const app: express.Express = express()
 app.use(express.json())
@@ -54,7 +54,7 @@ app.use(express.urlencoded({ extended: true }))
 const PORT = process.env.PORT || 3000;
 
 //部屋ごとの盤面情報保持
-let boards: roomDictionaryArray = {};
+const boards: roomDictionaryArray = {};
 
 async function main() {
     //AzureDB接続
@@ -93,20 +93,21 @@ async function main() {
     const querySpec = {
         query: "select u.pk,u.id,u.rate,u.name from users u"
     };
+    let usersCosmos: usersCosmosDB;
     // Get items 
     try {
         //cosmosDBが使いにくいので都度問い合わせるのでなく、
         //ランキング情報全て取得しておいてメモリに持った情報を参照する。更新は都度更新しにいく
-        let { resources } = await container.items.query(querySpec).fetchAll();
+        const { resources } = await container.items.query(querySpec).fetchAll();
         console.log('cosmosDB Data:', resources);
         //配列のままだと使いにくいので、id(userID)をキーにしたオブジェクトに
-        var usersCosmos: usersCosmosDB = resources.reduce((acc, item) => {
+        usersCosmos = resources.reduce((acc, item) => {
             acc[item['id']] = item;
             return acc;
         }, {});
     } catch (error) {
         console.log(error);
-        var usersCosmos: usersCosmosDB = {};
+        usersCosmos = {};
     }
 
     //CROS対応
@@ -160,20 +161,20 @@ async function main() {
             const startboard = problemlines[problemnum];
             const answer = answerlines[problemnum];
 
-            let sboard: board = {};
+            const sboard: board = {};
             // 通常のfor文で行う
-            for (var i = 0; i < 81; i++) {
-                let syou = Math.floor(i / 9);
-                let mod = i % 9;
-                let coord = String(syou) + String(mod);
-                let inval = startboard[i];
+            for (let i = 0; i < 81; i++) {
+                const syou = Math.floor(i / 9);
+                const mod = i % 9;
+                const coord = String(syou) + String(mod);
+                const inval = startboard[i];
                 let inid = 'auto';
                 if (inval === '-') {
                     inid = 'mada';
                 }
                 sboard[coord] = { id: inid, val: inval };
             }
-            let singleObject = { 'board': sboard, 'answer': answer };
+            const singleObject = { 'board': sboard, 'answer': answer };
 
             socket.emit('singleplay', singleObject);
         });
@@ -190,12 +191,12 @@ async function main() {
                 usersCosmos[socket.data.userId] = {
                     "pk": "A",//必要。pkとユニークキーがないとcosmosDBはindexが効かない。
                     "id": socket.data.userId,//ユニークキー
-                    "name": data['name'].substr(0, 24),//不正に長い文字を投げられても制限する。
+                    "name": data['name'].slice(0, 24),//不正に長い文字を投げられても制限する。
                     "rate": 1500
                 };
             } else {
                 //名前だけ更新
-                usersCosmos[socket.data.userId]['name'] = data['name'].substr(0, 24);
+                usersCosmos[socket.data.userId]['name'] = data['name'].slice(0, 24);
             }
 
             //試合後などに再戦する場合、
@@ -339,20 +340,20 @@ async function main() {
      * @returns 
      */
     function generateStartBoard(userId1: string, userId2: string) {
-        let problemnum = getRandomInt(500);
-        let startboard = problemlines[problemnum];
-        let answer = answerlines[problemnum];
+        const problemnum = getRandomInt(500);
+        const startboard = problemlines[problemnum];
+        const answer = answerlines[problemnum];
         const asarray = answer.match(/.{9}/g);
         const askaigyo = asarray?.join('\n');
         console.log(askaigyo);//デバッグで自分で入力するとき用に魔法陣の答え出力
 
         const board: board = {};
         // 通常のfor文で行う
-        for (var i = 0; i < 81; i++) {
-            let syou = Math.floor(i / 9);
-            let mod = i % 9;
-            let coord = String(syou) + String(mod);
-            let inval = startboard[i];
+        for (let i = 0; i < 81; i++) {
+            const syou = Math.floor(i / 9);
+            const mod = i % 9;
+            const coord = String(syou) + String(mod);
+            const inval = startboard[i];
             let inid = 'auto';
             if (inval === '-') {
                 inid = 'mada';
@@ -377,22 +378,19 @@ async function main() {
      * @param socket 
      */
     function check(submitInfo: { userId: string, roomId: string, coordinate: string, val: string }, socket: socketio.Socket) {
-        let subinfo = submitInfo;
+        const subinfo = submitInfo;
         //let usid = subinfo['userId'];//送られてきたuserIdを使用するとまずいので
         const usid = socket.data.matchUserId;
-        let rmid = subinfo['roomId'];
-        let cod = subinfo['coordinate'];
-        let val: string = subinfo['val'];
-        let indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
+        const rmid = subinfo['roomId'];
+        const cod = subinfo['coordinate'];
+        const val: string = subinfo['val'];
+        const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
         // if (!(usid in boards[rmid]['points'])) {//nagai初期化時に作るようにしたのでこれは不要なはず
         //     boards[rmid]['points'][usid] = 0;
         // }
         if (boards[rmid]['countdown'] > 0) {
             console.log('カウントダウン中のため入力棄却');
         }
-
-        //deepcopyでないはずなのでこの時点で代入しておいてよいはず
-        const state = (({ board, points }) => { return { board, points } })(boards[rmid]);
 
         if (boards[rmid]['answer'][indx] === val && boards[rmid]['board'][cod]['val'] === '-') {//まだ値が入っていないものに対して
             //正解の場合
@@ -429,9 +427,6 @@ async function main() {
                     io.to(rmsocketid).emit("state", boards[rmid]['eachState'][sock?.data.matchUserId]);
                 }
             });
-
-            //io.to(rmid).emit("event", event);
-            //io.to(rmid).emit("state", state);
         } else if (boards[rmid]['board'][cod]['val'] === '-') {
             console.log('不正解');
             //不正解の場合減点
@@ -531,6 +526,3 @@ async function main() {
 
 }
 main().catch(e => { console.log(e); });
-
-
-
