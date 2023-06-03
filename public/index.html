@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html style="width:100%;">
 
 <head>
   <title>sudoku</title>
@@ -10,173 +10,180 @@
   <link href='http://fonts.googleapis.com/css?family=Roboto:900,400' rel='stylesheet' type='text/css'>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="数独の一対一対戦ゲームでレートを競い合いましょう。一人でも楽しめます。sudoku online battle!">
+  <meta name="description" content="数独の一対一対戦ゲームでレートを競い合う。sudoku online battle!">
   <meta name="author" content="mirenn00">
   <link rel="icon" href="/favicon.ico">
 
 <body>
-  <main>
+  <main class="container">
     <h1 id="midasi">Sudoku Online</h1>
-    <h3 id="waiting_num"></h3>
-    <div class="d-flex justify-content-center align-items-center">
+    <span id="waiting_num" class="d-flex justify-content-center"></span>
+    <div id="waiting_disp" class="d-flex justify-content-center d-none">
+      <span id="waiting">対戦待ち接続中</span>
+      <div class="loader"></div>
+    </div>
+    <span id="disp2" class="d-flex justify-content-center mb-2 d-none"></span>
+    <div id="name_button" class="d-flex justify-content-center align-items-center mb-1">
       <div class="form-group">
         <input type="text" class="form-control" id="nick" placeholder="Nickname" maxlength="24">
       </div>
-      <div class="d-flex">
+      <div class="d-flex mx-3">
         <button id="go_game" class="btn btn-primary rounded-pill" type="button">Play Online</button>
       </div>
     </div>
-    <div id="waiting_disp">
-      <h2 id="waiting">対戦待ち接続中</h2>
-      <div class="loader"></div>
-    </div>
-    <h2 id="disp2"></h2>
-    <div class="table-container" style="position: relative;">
-      <img id="closeicon" src="close_FILL0_wght400_GRAD0_opsz48.svg" alt="image" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1;width: 400px;">
-      <table id="main" class="main">
-        <tr>
-          <td id="00" class="clickenable"></td>
-          <td id="01" class="clickenable"></td>
-          <td id="02" class="clickenable"></td>
-          <td id="03" class="clickenable"></td>
-          <td id="04" class="clickenable"></td>
-          <td id="05" class="clickenable"></td>
-          <td id="06" class="clickenable"></td>
-          <td id="07" class="clickenable"></td>
-          <td id="08" class="clickenable"></td>
-        </tr>
-        <tr>
-          <td id="10" class="clickenable"></td>
-          <td id="11" class="clickenable"></td>
-          <td id="12" class="clickenable"></td>
-          <td id="13" class="clickenable"></td>
-          <td id="14" class="clickenable"></td>
-          <td id="15" class="clickenable"></td>
-          <td id="16" class="clickenable"></td>
-          <td id="17" class="clickenable"></td>
-          <td id="18" class="clickenable"></td>
-        </tr>
-        <tr>
-          <td id="20" class="clickenable"></td>
-          <td id="21" class="clickenable"></td>
-          <td id="22" class="clickenable"></td>
-          <td id="23" class="clickenable"></td>
-          <td id="24" class="clickenable"></td>
-          <td id="25" class="clickenable"></td>
-          <td id="26" class="clickenable"></td>
-          <td id="27" class="clickenable"></td>
-          <td id="28" class="clickenable"></td>
-        </tr>
-        <tr>
-          <td id="30" class="clickenable"></td>
-          <td id="31" class="clickenable"></td>
-          <td id="32" class="clickenable"></td>
-          <td id="33" class="clickenable"></td>
-          <td id="34" class="clickenable"></td>
-          <td id="35" class="clickenable"></td>
-          <td id="36" class="clickenable"></td>
-          <td id="37" class="clickenable"></td>
-          <td id="38" class="clickenable"></td>
-        </tr>
-        <tr>
-          <td id="40" class="clickenable"></td>
-          <td id="41" class="clickenable"></td>
-          <td id="42" class="clickenable"></td>
-          <td id="43" class="clickenable"></td>
-          <td id="44" class="clickenable"></td>
-          <td id="45" class="clickenable"></td>
-          <td id="46" class="clickenable"></td>
-          <td id="47" class="clickenable"></td>
-          <td id="48" class="clickenable"></td>
-        </tr>
-        <tr>
-          <td id="50" class="clickenable"></td>
-          <td id="51" class="clickenable"></td>
-          <td id="52" class="clickenable"></td>
-          <td id="53" class="clickenable"></td>
-          <td id="54" class="clickenable"></td>
-          <td id="55" class="clickenable"></td>
-          <td id="56" class="clickenable"></td>
-          <td id="57" class="clickenable"></td>
-          <td id="58" class="clickenable"></td>
-        </tr>
-        <tr>
-          <td id="60" class="clickenable"></td>
-          <td id="61" class="clickenable"></td>
-          <td id="62" class="clickenable"></td>
-          <td id="63" class="clickenable"></td>
-          <td id="64" class="clickenable"></td>
-          <td id="65" class="clickenable"></td>
-          <td id="66" class="clickenable"></td>
-          <td id="67" class="clickenable"></td>
-          <td id="68" class="clickenable"></td>
-        </tr>
-        <tr>
-          <td id="70" class="clickenable"></td>
-          <td id="71" class="clickenable"></td>
-          <td id="72" class="clickenable"></td>
-          <td id="73" class="clickenable"></td>
-          <td id="74" class="clickenable"></td>
-          <td id="75" class="clickenable"></td>
-          <td id="76" class="clickenable"></td>
-          <td id="77" class="clickenable"></td>
-          <td id="78" class="clickenable"></td>
-        </tr>
-        <tr>
-          <td id="80" class="clickenable"></td>
-          <td id="81" class="clickenable"></td>
-          <td id="82" class="clickenable"></td>
-          <td id="83" class="clickenable"></td>
-          <td id="84" class="clickenable"></td>
-          <td id="85" class="clickenable"></td>
-          <td id="86" class="clickenable"></td>
-          <td id="87" class="clickenable"></td>
-          <td id="88" class="clickenable"></td>
-        </tr>
-      </table>
-    </div>
-    <table class="select">
-      <td id="1" class="numbutton">1</td>
-      <td id="2" class="numbutton">2</td>
-      <td id="3" class="numbutton">3</td>
-      <td id="4" class="numbutton">4</td>
-      <td id="5" class="numbutton">5</td>
-      <td id="6" class="numbutton">6</td>
-      <td id="7" class="numbutton">7</td>
-      <td id="8" class="numbutton">8</td>
-      <td id="9" class="numbutton">9</td>
-    </table>
-    <div id="scoreboard">
-      <h3><span style="color: #a3ffa3;">■</span>自分:
-        <span id="point_1"></span>
-      </h3>
-      <h3><span style="color: #f5d1fb;">■</span>相手:
-        <span id="point_2"></span>
-      </h3>
-    </div>
-    <div class="box">
-      <div id="replay" class="remove" onclick="remove()">もう一度対戦する</div>
-    </div>
-    <textarea class="form-control" id="log" readonly></textarea>
-    <div id="chat">
-      <ul id="messages"></ul>
-      <form id="message_form" action="#">
-        <input id="input_msg" autocomplete="off" /><button>Send</button>
-      </form>
-    </div>
-    <div class="form-group">
-      <table id="ranking" class="table table-bordered caption-top table-hover">
-        <caption>ranking</caption>
-        <thead>
+    <div class="row d-flex justify-content-center">
+      <div class="col-md-6 mb-4" style="position: relative;">
+        <!--img id="closeicon" src="close_FILL0_wght400_GRAD0_opsz48.svg" alt="image"
+          style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1;width: 400px;"-->
+        <table id="sudoku" class="sudoku">
           <tr>
-            <th scope="col">#</th>
-            <th scope="col">name</th>
-            <th scope="col">rate</th>
-            <th scope="col">rank</th>
+            <td id="00" class="clickenable"></td>
+            <td id="01" class="clickenable"></td>
+            <td id="02" class="clickenable"></td>
+            <td id="03" class="clickenable"></td>
+            <td id="04" class="clickenable"></td>
+            <td id="05" class="clickenable"></td>
+            <td id="06" class="clickenable"></td>
+            <td id="07" class="clickenable"></td>
+            <td id="08" class="clickenable"></td>
           </tr>
-        </thead>
-      </table>
+          <tr>
+            <td id="10" class="clickenable"></td>
+            <td id="11" class="clickenable"></td>
+            <td id="12" class="clickenable"></td>
+            <td id="13" class="clickenable"></td>
+            <td id="14" class="clickenable"></td>
+            <td id="15" class="clickenable"></td>
+            <td id="16" class="clickenable"></td>
+            <td id="17" class="clickenable"></td>
+            <td id="18" class="clickenable"></td>
+          </tr>
+          <tr>
+            <td id="20" class="clickenable"></td>
+            <td id="21" class="clickenable"></td>
+            <td id="22" class="clickenable"></td>
+            <td id="23" class="clickenable"></td>
+            <td id="24" class="clickenable"></td>
+            <td id="25" class="clickenable"></td>
+            <td id="26" class="clickenable"></td>
+            <td id="27" class="clickenable"></td>
+            <td id="28" class="clickenable"></td>
+          </tr>
+          <tr>
+            <td id="30" class="clickenable"></td>
+            <td id="31" class="clickenable"></td>
+            <td id="32" class="clickenable"></td>
+            <td id="33" class="clickenable"></td>
+            <td id="34" class="clickenable"></td>
+            <td id="35" class="clickenable"></td>
+            <td id="36" class="clickenable"></td>
+            <td id="37" class="clickenable"></td>
+            <td id="38" class="clickenable"></td>
+          </tr>
+          <tr>
+            <td id="40" class="clickenable"></td>
+            <td id="41" class="clickenable"></td>
+            <td id="42" class="clickenable"></td>
+            <td id="43" class="clickenable"></td>
+            <td id="44" class="clickenable"></td>
+            <td id="45" class="clickenable"></td>
+            <td id="46" class="clickenable"></td>
+            <td id="47" class="clickenable"></td>
+            <td id="48" class="clickenable"></td>
+          </tr>
+          <tr>
+            <td id="50" class="clickenable"></td>
+            <td id="51" class="clickenable"></td>
+            <td id="52" class="clickenable"></td>
+            <td id="53" class="clickenable"></td>
+            <td id="54" class="clickenable"></td>
+            <td id="55" class="clickenable"></td>
+            <td id="56" class="clickenable"></td>
+            <td id="57" class="clickenable"></td>
+            <td id="58" class="clickenable"></td>
+          </tr>
+          <tr>
+            <td id="60" class="clickenable"></td>
+            <td id="61" class="clickenable"></td>
+            <td id="62" class="clickenable"></td>
+            <td id="63" class="clickenable"></td>
+            <td id="64" class="clickenable"></td>
+            <td id="65" class="clickenable"></td>
+            <td id="66" class="clickenable"></td>
+            <td id="67" class="clickenable"></td>
+            <td id="68" class="clickenable"></td>
+          </tr>
+          <tr>
+            <td id="70" class="clickenable"></td>
+            <td id="71" class="clickenable"></td>
+            <td id="72" class="clickenable"></td>
+            <td id="73" class="clickenable"></td>
+            <td id="74" class="clickenable"></td>
+            <td id="75" class="clickenable"></td>
+            <td id="76" class="clickenable"></td>
+            <td id="77" class="clickenable"></td>
+            <td id="78" class="clickenable"></td>
+          </tr>
+          <tr>
+            <td id="80" class="clickenable"></td>
+            <td id="81" class="clickenable"></td>
+            <td id="82" class="clickenable"></td>
+            <td id="83" class="clickenable"></td>
+            <td id="84" class="clickenable"></td>
+            <td id="85" class="clickenable"></td>
+            <td id="86" class="clickenable"></td>
+            <td id="87" class="clickenable"></td>
+            <td id="88" class="clickenable"></td>
+          </tr>
+        </table>
+        <table class="select">
+          <td id="1" class="numbutton">1</td>
+          <td id="2" class="numbutton">2</td>
+          <td id="3" class="numbutton">3</td>
+          <td id="4" class="numbutton">4</td>
+          <td id="5" class="numbutton">5</td>
+          <td id="6" class="numbutton">6</td>
+          <td id="7" class="numbutton">7</td>
+          <td id="8" class="numbutton">8</td>
+          <td id="9" class="numbutton">9</td>
+        </table>
+      </div>
+      <div id="dashboard" class="card col-md-3 mb-4 box-shadow d-none">
+        <div class="card-body">
+          <div id="scoreboard" class="mb-4">
+            <div><span style="color: #a3ffa3;">■</span>自分:
+              <span id="point_1"></span>
+            </div>
+            <div><span style="color: #f5d1fb;">■</span>相手:
+              <span id="point_2"></span>
+            </div>
+          </div>
+          <textarea class="form-control" placeholder="log" id="log" readonly></textarea>
+          <div id="chat" class="mb-4">
+            <ul id="messages"></ul>
+            <form id="message_form" action="#">
+              <input id="input_msg" placeholder="message" class="form-control mb-2" autocomplete="off" />
+              <button class="btn btn-primary" data-bs-toggle="tooltip" title="send message">Send</button>
+            </form>
+          </div>
+        </div>
+      </div>
     </div>
+    <div class="row d-flex justify-content-center">
+    <div class="col-md-6">
+      <div class="form-group">
+        <table id="ranking" class="table table-bordered caption-top table-hover ">
+          <caption>ranking</caption>
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">name</th>
+              <th scope="col">rate</th>
+              <th scope="col">rank</th>
+            </tr>
+          </thead>
+        </table>
+    </div></div></div>
   </main>
   <script type="text/javascript" src="main.js"></script>
   <script src="./assets/dist/js/bootstrap.bundle.min.js"></script>

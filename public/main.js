@@ -31,6 +31,7 @@ const subUserId = self.crypto.randomUUID();
 */
 let state = null;
 
+/* global io */
 var socketio = io();
 
 //0でないと数独の答え提出処理は走らない
@@ -172,12 +173,12 @@ socketio.on('match', function (rid) {
     //////
     roomId = rid;
     localStorage.setItem('roomId', roomId);
-    //表示非表示
-    document.getElementById('waiting_disp').style.display = 'none';
-    document.getElementById('waiting_num').style.display = 'none';
-    document.getElementById('log').style.display = 'block';
-    document.getElementById('chat').style.display = 'block';
-    document.getElementById('scoreboard').style.display = 'block';
+    //非表示
+    document.getElementById('waiting_disp').classList.add('d-none');//対戦街接続中
+    document.getElementById('waiting_num').classList.add('d-none');//現在の総接続人数
+    //表示
+    document.getElementById('dashboard').classList.remove('d-none');
+    document.getElementById('disp2').classList.remove('d-none');
 
     //チャットクリア
     const list = document.getElementById("messages");
@@ -220,20 +221,25 @@ socketio.on('opponentSelect', function (data) {
 });
 //ゲームのイベント
 socketio.on('event', function (eventData) {
-    if (eventData.status === 'incorrect' && (eventData.userId === userId || eventData.userId === subUserId)) {
-        //自分が不正解だった場合
-        const image = document.getElementById("closeicon");
-        image.style.display = "block";
-        setTimeout(function () {
-            image.style.display = "none";
-        }, 300);
+    if (eventData.status === 'incorrect') {
+        //自分が不正解だった場合&& (eventData.userId === userId || eventData.userId === subUserId)
+        // const image = document.getElementById("closeicon");
+        // image.style.display = "block";
+        // setTimeout(function () {
+        //     image.style.display = "none";
+        // }, 300);
+        //不正解だった場合はバツ画像を表示。（なんの数字を入れたかは相手側のはログを見るしか無い……）
+        document.getElementById(eventData.coordinate).classList.add('cross');
+        setTimeout(function() {
+            document.getElementById(eventData.coordinate).classList.remove('cross');
+        }, 1000);
     }
     //今は文字を画面に表示しているだけなので文字列で送ってくるだけで良い……。
-    const who = (eventData.userId === userId || eventData.userId === subUserId) ? 'あなた' : '相手';
+    const who = (eventData.userId === userId || eventData.userId === subUserId) ? '自分' : '相手';
     const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
     const seigo = eventData.status === 'correct' ? '正解' : '不正解';
     const nyuuryoku = eventData.val;
-    const log = seigo + ':' + who + ' 入力' + nyuuryoku + ' ' + zahyo;
+    const log = seigo + ':' + who + ' ' + nyuuryoku + ' ' + zahyo;
     const txarea = document.getElementById('log');
     txarea.value += log + "\n";
     txarea.scrollTop = txarea.scrollHeight;
@@ -274,14 +280,11 @@ socketio.on("state", function (data) {
 //接続エラー時のイベントらしい
 socketio.on("error", (error) => {
     // ...
-    console.log('nagai error テスト確認');
+    console.log('nagai error テスト確認', error);
 });
 
 // クリックされた要素を保持
 let place;
-
-let point_1;
-let point_2;
 
 // 空の数独魔法陣作成など
 function render_empty_board() {
@@ -290,7 +293,7 @@ function render_empty_board() {
     for (let i = 0; i < targets.length; i++) {
         targets[i].addEventListener("click", (e) => {
             console.log("nagai click", e.target.textContent);
-            mainClick(e);
+            sudokuClick(e);
         }, false);
     }
 
@@ -304,23 +307,23 @@ function render_empty_board() {
 let button = document.getElementById('go_game');
 button.onclick = goGameButtonClick;
 function goGameButtonClick(e) {
-    document.getElementById('waiting_disp').style.display = 'flex';
-    document.getElementById('go_game').style.display = 'none';
+    document.getElementById('waiting_disp').classList.remove('d-none');
+    document.getElementById('name_button').classList.add('d-none');
     socketio.emit("gogame", { roomId: roomId, userId: userId, subUserId: subUserId, name: document.getElementById('nick').value });
 }
 
 // 問題パネルのマスが押された時の処理
-// mainClickクラスを一か所につける
+// sudokuClickクラスを一か所につける
 //ただし、つけているところをクリックしたら消せる
-function mainClick(e) {
+function sudokuClick(e) {
     let onazi = false;
-    if (e.target.classList.contains('mainClick')) {
+    if (e.target.classList.contains('sudokuClick')) {
         //前回押したところが今回押したところと同じならば(今回押したところをすでにクリックしていたなら)
         onazi = true;
     }
 
-    if (place != undefined) {//前のmainClickクラスを消す
-        place.classList.remove('mainClick');
+    if (place != undefined) {//前のsudokuClickクラスを消す
+        place.classList.remove('sudokuClick');
     }
 
     if (onazi) {
@@ -329,7 +332,7 @@ function mainClick(e) {
     }
 
     place = e.target;
-    place.classList.add('mainClick');
+    place.classList.add('sudokuClick');
     socketio.emit("myselect", e.target.id);
 }
 
@@ -337,12 +340,12 @@ function mainClick(e) {
 function selectClick(e) {
     console.log('nagai select click');
     if (singlePlayFlag) {
-        if (document.getElementsByClassName("mainClick")[0] === undefined || document.getElementsByClassName("mainClick")[0].textContent != "-") { return; }
-        let datas = document.getElementById("main").querySelectorAll("tr");
+        if (document.getElementsByClassName("sudokuClick")[0] === undefined || document.getElementsByClassName("sudokuClick")[0].textContent != "-") { return; }
+        let datas = document.getElementById("sudoku").querySelectorAll("tr");
         //本当は二重ループ回す必要ない
         outer_loop: for (let i = 0; i < datas.length; i++) {
             for (let j = 0; j < datas[i].querySelectorAll("td").length; j++) {
-                if (datas[i].querySelectorAll("td")[j].classList.contains("mainClick")) {
+                if (datas[i].querySelectorAll("td")[j].classList.contains("sudokuClick")) {
                     const id = String(i) + String(j);
                     if (e.target.textContent === singlePlayState['answer'][i * 9 + j]) {
                         //正解の場合
@@ -351,11 +354,15 @@ function selectClick(e) {
                         localStorage.setItem('singlePlayState', JSON.stringify(singlePlayState));
                     } else {
                         //不正解の場合
-                        const image = document.getElementById("closeicon");
-                        image.style.display = "block";
-                        setTimeout(function () {
-                            image.style.display = "none";
-                        }, 300);
+                        // const image = document.getElementById("closeicon");
+                        // image.style.display = "block";
+                        // setTimeout(function () {
+                        //     image.style.display = "none";
+                        // }, 300);
+                        document.getElementById(id).classList.add('cross');
+                        setTimeout(function() {
+                            document.getElementById(id).classList.remove('cross');
+                        }, 1000);
                     }
                     break outer_loop;
                 }
@@ -372,12 +379,12 @@ function selectClick(e) {
         }
     } else {
         if (countdown > 0) return;//カウントダウン中に押してもすぐ終了
-        if (document.getElementsByClassName("mainClick")[0] === undefined || document.getElementsByClassName("mainClick")[0].textContent != "-") { return; }
-        let datas = document.getElementById("main").querySelectorAll("tr");
+        if (document.getElementsByClassName("sudokuClick")[0] === undefined || document.getElementsByClassName("sudokuClick")[0].textContent != "-") { return; }
+        let datas = document.getElementById("sudoku").querySelectorAll("tr");
         //for文回さなくても選択しているマスはclassで分かるのでそのうち書き換える……
         outer_loop: for (let i = 0; i < datas.length; i++) {
             for (let j = 0; j < datas[i].querySelectorAll("td").length; j++) {
-                if (datas[i].querySelectorAll("td")[j].classList.contains("mainClick")) {
+                if (datas[i].querySelectorAll("td")[j].classList.contains("sudokuClick")) {
                     let cd = String(i) + String(j);
                     //送信処理//答え送信
                     let submitInfo = { roomId: roomId, coordinate: cd, val: e.target.textContent };
@@ -420,6 +427,6 @@ function scoreProcess(points, endgame) {
         localStorage.removeItem('roomId');
         roomId = null;//nagai本当にこれで良いか？
 
-        document.getElementById('go_game').style.display = 'block';
+        document.getElementById('name_button').classList.remove('d-none');
     }
 }

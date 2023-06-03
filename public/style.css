@@ -1,13 +1,31 @@
-* {
-    margin: 0;
+.cross {
+    /* position: relative;
+    font-size: 20px; */
+    background-image: url('close_FILL0_wght400_GRAD0_opsz48.svg');
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: contain;
 }
 
-main {
-    width: 420px;
-    margin: auto;
-    user-select: none;
+/* 
+.close::before {
+    content: "×";
+    position: absolute;
+    top: 0;
+    left: 0;
+    color: #6091d3;
+    opacity: 50%;
 }
-body{
+.close::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+} */
+
+body {
     background-color: #f5f5f5;
 }
 
@@ -26,20 +44,18 @@ table {
     background-color: white;
 }
 
-.main {
+.sudoku {
     overflow: hidden;
 }
 
-/*横方向のhover .main tr:hover {
-    background-color: #f3ece3;
-} */
-#midasi,#waiting_num{
-    text-align:center;
-}
-#waiting{
-    text-align:center;
+#midasi,
+#waiting_num {
+    text-align: center;
 }
 
+#waiting {
+    text-align: center;
+}
 
 #go_game {
     /*display: block;*/
@@ -47,19 +63,19 @@ table {
     margin: auto;
     margin-top: 10px;
     margin-bottom: 10px;
-    font-size: x-large;
+    font-size: large;
 }
 
-.main td {
+.sudoku td {
     border: 1px solid #6091d3;
     text-align: center;
-    font-size: 30px;
-    width: 45px;
-    height: 45px;
+    font-size: large;
+    width: 40px;
+    height: 40px;
     position: relative;
 }
 
-.main td:hover:not(.mainClick) {
+.sudoku td:hover:not(.sudokuClick) {
     /*クリックしたらホバークラスはつけない*/
     background-color: #cee8ce;
 }
@@ -93,19 +109,19 @@ table {
     cursor: pointer;
 }
 
-.main tr:first-child td {
+.sudoku tr:first-child td {
     border-top: 4px solid #6091d3;
 }
 
-.main tr:nth-of-type(3n) td {
+.sudoku tr:nth-of-type(3n) td {
     border-bottom: 4px solid #6091d3;
 }
 
-.main td:first-child {
+.sudoku td:first-child {
     border-left: 4px solid #6091d3;
 }
 
-.main td:nth-of-type(3n) {
+.sudoku td:nth-of-type(3n) {
     border-right: 4px solid #6091d3;
 }
 
@@ -121,21 +137,21 @@ table {
 .select td {
     border: 2px #6091d3 solid;
     text-align: center;
-    font-size: 30px;
-    width: 45px;
-    height: 45px;
+    font-size: large;
+    width: 40px;
+    height: 40px;
 }
 
-.mainClick {
+.sudokuClick {
     background-color: #d9ffd9;
     /*#f3ece3;*/
 }
 
-.mainClick.own {
+.sudokuClick.own {
     background-color: #bff6bf;
 }
 
-.mainClick.opponent {
+.sudokuClick.opponent {
     background-color: #f5d1fb;
 }
 
@@ -143,15 +159,6 @@ table {
     background-color: #bdbdbd;
 }
 
-.remove {
-    border: 2px #6091d3 solid;
-    border-radius: 10px;
-    text-align: center;
-    font-size: 30px;
-    padding: 0 10px;
-    /* width: 100px;
-    height: 45px; */
-}
 /* 
 .check {
     margin-right: 135px;
@@ -164,7 +171,6 @@ table {
 } */
 
 #waiting_disp {
-    display: none;
     /*display: flex;*/
     justify-content: center;
     align-items: center;
@@ -177,14 +183,13 @@ table {
 }
 
 #log {
-    width: inherit;
-    height: 50px;
-    margin: auto;
-    display: none;
+    font-size: small;
+    height: 80px;
 }
 
-#scoreboard,#replay,#chat,#closeicon{
-    display: none;
+#scoreboard,
+#chat {
+    display: block;
 }
 
 /* #ranking{
