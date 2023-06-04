@@ -57,7 +57,7 @@ interface gogamedata {
  * cosmosDBからとってきてメモリに保持する情報
  * idはpubUserId
  */
-interface usersCosmosDB { [id: string]: { pk: string, id: string, rate: number, name: string } }
+interface usersCosmosDB { [id: string]: { pk: string, id: string, userId: string, rate: number, name: string } }
 interface socketData { userId: string, matchUserId: string, pubUserId: string }
 
 //数独の問題と答えのセットを生成
@@ -110,7 +110,7 @@ async function main() {
     // }
     console.log(`${container.id} container ready`);
     const querySpec = {
-        query: "select u.pk,u.id,u.rate,u.name from users u"
+        query: "select u.pk,u.id,u.userId,u.rate,u.name from users u"
     };
     let usersCosmos: usersCosmosDB;
     // Get items 
@@ -119,7 +119,7 @@ async function main() {
         //ランキング情報全て取得しておいてメモリに持った情報を参照する。更新は都度更新しにいく
         const { resources } = await container.items.query(querySpec).fetchAll();
         console.log('cosmosDB Data:', resources);
-        //配列のままだと使いにくいので、id(userID)をキーにしたオブジェクトに
+        //配列のままだと使いにくいので、id(userId)をキーにしたオブジェクトに
         usersCosmos = resources.reduce((acc, item) => {
             acc[item['id']] = item;
             return acc;
@@ -203,12 +203,18 @@ async function main() {
                 usersCosmos[socket.data.pubUserId] = {
                     "pk": "A",//必要。pkとユニークキーがないとcosmosDBはindexが効かない。
                     "id": socket.data.pubUserId,//ユニークキー
+                    "userId": socket.data.userId,
                     "name": data['name'].slice(0, 24),//不正に長い文字を投げられても制限する。
                     "rate": 1500
                 };
-            } else {
+            } else if (socket.data.userId === usersCosmos[socket.data.pubUserId]['userId']) {
                 //名前だけ更新
                 usersCosmos[socket.data.pubUserId]['name'] = data['name'].slice(0, 24);
+            } else {
+                //nagai pubUserIdは既に入っているのと同じものを持っているのに
+                //userIdが一致しない場合……、それは他の人のpubUserIdに不正なパスワードで入るのと同じ
+                console.log('不正検知:', socket.data.pubUserId, socket.data.userId);
+                return;
             }
 
             //試合後などに再戦する場合、
@@ -502,7 +508,7 @@ async function main() {
                 const diffrate = boards[rmid]['points'][mUserIds[0]] - boards[rmid]['points'][mUserIds[1]];
                 usersCosmos[pUser0Id]['rate'] += diffrate;
                 usersCosmos[pUser1Id]['rate'] -= diffrate;
-                const ranking: { id: string; rate: number, name: string }[] = Object.values(usersCosmos);
+                const ranking: { id: string; rate: number, userId: string, name: string }[] = Object.values(usersCosmos);
                 io.to(rmid).emit('ranking', ranking);
                 try {
                     await container.items.upsert(usersCosmos[pUser0Id]);
