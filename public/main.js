@@ -1,7 +1,6 @@
 /**
-* 他人にばれてはいけない回答提出用のユーザーID
-* ばれた場合、他人が
-* pubUserIDのパスワードのようなもの
+* 他人にばれてはいけないユーザーID
+* pubUserIDのログインパスワードのようなもの
 */
 let userId = localStorage.getItem('userId');
 if (!userId) {
@@ -12,7 +11,7 @@ if (!userId) {
  * 公開用ユーザーID
  * サーバーから返却される盤面情報のユーザー識別子/ランキングのユーザー識別子に使用。
  * ゲーム開始時最初にuserIdとpubUserIdを提出、
- * 回答提出はuserIdで行い、返却される情報はpubUserIdを用いたものになる。
+ * 返却される情報はpubUserIdを用いたものになる。
  */
 let pubUserId = localStorage.getItem('pubUserId');
 if (!pubUserId) {

@@ -95,7 +95,7 @@ else if (data['mode'] === 'TurnMode') {
                             cl0.emit('match', roomId);
                             cl1.emit('match', roomId);
 
-                            if (cl0.data.userId === cl1.data.userId) {//同一ブラウザ同士の対決の場合
+                            if (cl0.data.pubUserId === cl1.data.pubUserId) {//同一ブラウザ同士の対決、もしく同一のpubUserId同士（不正に設定）の場合
                                 cl0.data.matchUserId = cl0.data.subUserId;
                                 cl1.data.matchUserId = cl1.data.subUserId;
                             }
@@ -139,3 +139,9 @@ else if (data['mode'] === 'TurnMode') {
                         }
                     }
                 }
+
+みすった……
+pubUserIdに他人のものを入れた場合成り代わることができる。
+成り代わるというのはrankingを自分のものにできるということ。
+pubUserIdとuserIdで一意なものにすれば成り代わりは防げる。
+別アカウント扱いにできる。
