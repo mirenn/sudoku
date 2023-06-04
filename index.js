@@ -341,9 +341,6 @@ function main() {
             const cod = subinfo['coordinate'];
             const val = subinfo['val'];
             const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
-            // if (!(usid in boards[rmid]['points'])) {//nagai初期化時に作るようにしたのでこれは不要なはず
-            //     boards[rmid]['points'][usid] = 0;
-            // }
             if (boards[rmid]['countdown'] > 0) {
                 console.log('カウントダウン中のため入力棄却');
             }

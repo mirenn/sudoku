@@ -1,13 +1,26 @@
-//ユーザーIDを適当に発行する
-//userIdは対戦ごとに毎回発行する。
-//nagai：自分同士の対戦はできるように維持したい・・・
-var userId = localStorage.getItem('userId');
-//let userId = self.crypto.randomUUID();
+/**
+* 他人にばれてはいけない回答提出用のユーザーID
+* ばれた場合、他人が
+* pubUserIDのパスワードのようなもの
+*/
+let userId = localStorage.getItem('userId');
 if (!userId) {
-    //httpsでしか使えないようなのでこけてたらそれをまず疑う
     userId = self.crypto.randomUUID();
     localStorage.setItem('userId', userId);
 }
+/**
+ * 公開用ユーザーID
+ * サーバーから返却される盤面情報のユーザー識別子/ランキングのユーザー識別子に使用。
+ * ゲーム開始時最初にuserIdとpubUserIdを提出、
+ * 回答提出はuserIdで行い、返却される情報はpubUserIdを用いたものになる。
+ */
+let pubUserId = localStorage.getItem('pubUserId');
+if (!pubUserId) {
+    pubUserId = self.crypto.randomUUID();
+    localStorage.setItem('pubUserId', pubUserId);
+}
+/**自分で同ブラウザ同士対戦用 userId,pubUserIdの代わりに使用される? */
+const subUserId = self.crypto.randomUUID();
 
 //部屋ID //途中で切断しても戻れるように
 let roomId = localStorage.getItem('roomId');
@@ -22,9 +35,6 @@ input.addEventListener('input', (event) => {
 });
 
 let ranking;
-
-//同じブラウザ自分同士対戦用
-const subUserId = self.crypto.randomUUID();
 
 /*state情報を一応持つ。
 ただし、保存した盤面情報は特に使用しない
@@ -91,7 +101,7 @@ socketio.on('connectnum', function (num) {
     document.getElementById('waiting_num').textContent = '現在の総接続人数' + num;
 });
 
-socketio.emit('requestranking', userId);
+socketio.emit('requestranking');
 socketio.on('ranking', function (data) {
     ranking = data;
     console.log('nagai ranking', ranking);
@@ -99,7 +109,7 @@ socketio.on('ranking', function (data) {
 
     const rankingTable = document.getElementById('ranking');
     const mytbody = document.createElement("tbody");
-    ranking.forEach(({ name, rate, userId }, index) => {
+    ranking.forEach(({ name, rate, id }, index) => {
         const mytr = document.createElement("tr");
         const myth = document.createElement("th");
         const mytd1 = document.createElement("td");
@@ -108,7 +118,7 @@ socketio.on('ranking', function (data) {
 
         const rank = getRank(rate);
         myth.textContent = index + 1;
-        mytd1.textContent = (userId === window.userId) ? name + '（あなた）' : name;
+        mytd1.textContent = (id === window.pubUserId) ? name + '（あなた）' : name;
         mytd2.textContent = rate;
         mytd3.textContent = rank;
 
@@ -122,7 +132,6 @@ socketio.on('ranking', function (data) {
     if (oldtbody) {
         rankingTable.removeChild(oldtbody);
     }
-    //rankingTable.replaceChild(mytbody, oldtbody);
     rankingTable.appendChild(mytbody);
 });
 
@@ -222,7 +231,7 @@ socketio.on('opponentSelect', function (data) {
 //ゲームのイベント
 socketio.on('event', function (eventData) {
     if (eventData.status === 'incorrect') {
-        //自分が不正解だった場合&& (eventData.userId === userId || eventData.userId === subUserId)
+        //自分が不正解だった場合&& (eventData.matchUserId === pubUserId || eventData.matchUserId === subUserId)
         // const image = document.getElementById("closeicon");
         // image.style.display = "block";
         // setTimeout(function () {
@@ -230,12 +239,12 @@ socketio.on('event', function (eventData) {
         // }, 300);
         //不正解だった場合はバツ画像を表示。（なんの数字を入れたかは相手側のはログを見るしか無い……）
         document.getElementById(eventData.coordinate).classList.add('cross');
-        setTimeout(function() {
+        setTimeout(function () {
             document.getElementById(eventData.coordinate).classList.remove('cross');
         }, 1000);
     }
     //今は文字を画面に表示しているだけなので文字列で送ってくるだけで良い……。
-    const who = (eventData.userId === userId || eventData.userId === subUserId) ? '自分' : '相手';
+    const who = (eventData.matchUserId === pubUserId || eventData.matchUserId === subUserId) ? '自分' : '相手';
     const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
     const seigo = eventData.status === 'correct' ? '正解' : '不正解';
     const nyuuryoku = eventData.val;
@@ -263,7 +272,7 @@ socketio.on("state", function (data) {
             //値に変更があった場合、値をセットする
             if (document.getElementById(bkey).textContent != bData[bkey].val) {
                 document.getElementById(bkey).textContent = bData[bkey].val;
-                if (bData[bkey].id === userId || bData[bkey].id === subUserId) {
+                if (bData[bkey].id === pubUserId || bData[bkey].id === subUserId) {
                     //classをつける
                     document.getElementById(bkey).classList.add('own');
                 } else if (bData[bkey].id !== 'auto' && bData[bkey].id !== 'mada') {
@@ -307,9 +316,17 @@ function render_empty_board() {
 let button = document.getElementById('go_game');
 button.onclick = goGameButtonClick;
 function goGameButtonClick(e) {
+    const el = document.getElementsByName('modeRadio');
+    const len = el.length;
+    let checkValue = '';
+    for (let i = 0; i < len; i++) {
+        if (el.item(i).checked) {
+            checkValue = el.item(i).value;
+        }
+    }
     document.getElementById('waiting_disp').classList.remove('d-none');
     document.getElementById('name_button').classList.add('d-none');
-    socketio.emit("gogame", { roomId: roomId, userId: userId, subUserId: subUserId, name: document.getElementById('nick').value });
+    socketio.emit("gogame", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value, mode: checkValue });
 }
 
 // 問題パネルのマスが押された時の処理
@@ -360,7 +377,7 @@ function selectClick(e) {
                         //     image.style.display = "none";
                         // }, 300);
                         document.getElementById(id).classList.add('cross');
-                        setTimeout(function() {
+                        setTimeout(function () {
                             document.getElementById(id).classList.remove('cross');
                         }, 1000);
                     }
@@ -387,7 +404,7 @@ function selectClick(e) {
                 if (datas[i].querySelectorAll("td")[j].classList.contains("sudokuClick")) {
                     let cd = String(i) + String(j);
                     //送信処理//答え送信
-                    let submitInfo = { roomId: roomId, coordinate: cd, val: e.target.textContent };
+                    let submitInfo = { roomId: roomId,coordinate: cd, val: e.target.textContent };
                     console.log('nagai submitInfo', submitInfo);//nagai 連打対策はしておいた方がよさそう
                     socketio.emit('submit', submitInfo);
                     break outer_loop;
@@ -402,11 +419,11 @@ function selectClick(e) {
 function scoreProcess(points, endgame) {
     let mypoint = 0;
     let opopoint = 0;
-    Object.keys(points).forEach(uid => {
-        if (uid === userId || uid === subUserId) {
-            mypoint = points[uid];
+    Object.keys(points).forEach(muid => {
+        if (muid === pubUserId || muid === subUserId) {
+            mypoint = points[muid];
         } else {
-            opopoint = points[uid];
+            opopoint = points[muid];
         }
     });
     document.getElementById("point_1").textContent = mypoint;
