@@ -125,6 +125,10 @@ table {
     border-right: 4px solid #6091d3;
 }
 
+.hutoiborder {
+    border: 5px solid #6091d3 !important;
+}
+
 .box {
     margin-top: 10px;
     display: flex;

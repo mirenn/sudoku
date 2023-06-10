@@ -4,6 +4,7 @@ import http from 'http'
 import fs from 'fs'
 import { CosmosClient } from "@azure/cosmos";
 import crypto from 'crypto'
+import AsyncLock from 'async-lock';
 
 /**
  * 現在の数独魔法陣盤面情報（見えている盤面）
@@ -11,7 +12,7 @@ import crypto from 'crypto'
 interface board {
     [coordinate: string]: {//座標
         id: string,//当てた人のid 自動:auto,まだ:mada,プレイヤー:userId
-        val: string,//見えている値
+        val: string,//見えている値。数字、まだ決まっていない値は-で表現
     }
 }
 /**
@@ -27,12 +28,17 @@ interface gameInfo {
     board: board,
     answer: string,//その部屋の魔法陣の正解情報
     points: points,//['points']['それぞれのuserのid']ここに各点数が入っている。userIdが最初からもてれるならこれでよかったが……、そうではなく初期化時どうしようもないので…空で宣言してからみたいな使い方になる
-    countdown: number,//ゲーム開始時のカウントダウンの残り秒数。
+    startCountDown: number,//ゲーム開始時のカウントダウンの残り秒数。
     logs: object[],//提出された情報の正解、不正解などの操作情報ログ
     idTable: { [userId: string]: string },//userIdとmatchUserIdの対応……使わずにsocket.dataのmatchUserIdを参照するのが基本。
     idTableMatchPub: { [matchUserId: string]: string },//matchUserIdとpubUserIdの対応。endgame時に使用
     mode: mode,
-    whichTurnUserId?: string//TurnMode時のみ存在するプロパティ
+    //以下turnmode時のみ存在。tsのエラーがめんどいのでany型に
+    turnArray?: any,//string[],//各ターンを司るidなどが入る。matchuserid0,'standby0',matchuserid1,'standby1'
+    turnIndex?: any,//number,//TurnMode時のみ存在するプロパティ。どのターンかturnArrayのindex
+    submitFlag?: any,//boolean 提出されたときtrueになる
+    turnModeGameEnd?: any,//boolean ゲーム終了時、もしくは誰も部屋にいないときtrueになる
+    countdown?: any//numberゲームを管理するカウントダウン
 }
 /**
  * 部屋
@@ -73,7 +79,12 @@ app.use(express.urlencoded({ extended: true }))
 const PORT = process.env.PORT || 3000;
 
 //部屋ごとの盤面情報保持
-const boards: roomDictionaryArray = {};
+const gameInfos: roomDictionaryArray = {};
+
+/**
+ * 非同期処理
+ */
+const lock = new AsyncLock();
 
 async function main() {
     //AzureDB接続
@@ -149,16 +160,21 @@ async function main() {
         const count = io.engine.clientsCount;
         // may or may not be similar to the count of Socket instances in the main namespace, depending on your usage
         //const count2 = io.of("/").sockets.size;
-
         io.emit('connectnum', count);
 
         //リセット。もしだれもいない部屋の盤面があれば消しておく
-        Object.keys(boards).forEach(rmkey => {
+        Object.keys(gameInfos).forEach(rmkey => {
             const rmclients = io.sockets.adapter.rooms.get(rmkey);
             const rmNumClients = rmclients ? rmclients.size : 0;
             if (rmNumClients === 0) {
                 console.log('誰も入っていない部屋のため削除 ルーム:', rmkey);
-                delete boards[rmkey];
+                if (gameInfos[rmkey]['mode'] && gameInfos[rmkey]['mode'] === 'TurnMode') {
+                    //turnmodeはsetTimeoutが非同期て動いているため、こっちで消したときに動いていると例外で死ぬため、消すのは
+                    //setTimeoutに任せる
+                    gameInfos[rmkey]['turnModeGameEnd'] = true;
+                } else {
+                    delete gameInfos[rmkey];
+                }
             }
         });
         //ランキングを返す
@@ -166,7 +182,7 @@ async function main() {
             const ranking: { id: string; rate: number, name: string }[] = Object.values(usersCosmos);
             socket.emit('ranking', ranking);
         });
-        //
+        //一人用のゲームの盤面を返す
         socket.on('requestsingleplay', function () {
             const problemnum = getRandomInt(500);
             const startboard = problemlines[problemnum];
@@ -210,6 +226,10 @@ async function main() {
             } else if (socket.data.userId === usersCosmos[socket.data.pubUserId]['userId']) {
                 //名前だけ更新
                 usersCosmos[socket.data.pubUserId]['name'] = data['name'].slice(0, 24);
+            } else if (socket.data.pubUserId === 'auto') {
+                //autoという文字列も入れられると困るので……
+                console.log('不正検知:', socket.data.pubUserId, socket.data.userId);
+                return;
             } else {
                 //nagai pubUserIdは既に入っているのと同じものを持っているのに
                 //userIdが一致しない場合……、それは他の人のpubUserIdに不正なパスワードで入るのと同じ
@@ -225,155 +245,257 @@ async function main() {
                     socket.leave(rm);
                 }
             });
-
             //まず最初に中断した部屋がないか確認する
-            if (roomId && roomId in boards) {
+            if (roomId && roomId in gameInfos) {
                 //中断した部屋がまだ残っている場合、そこに参加する。
                 socket.leave('waitingroom_simple');//一応ちゃんと抜ける
                 socket.leave('waitingroom_turn');
                 socket.join(roomId);
                 socket.emit('match', roomId);
-                socket.emit("state", { board: boards[roomId]['board'], points: boards[roomId]['points'] });
-            } else {
-                if (data['mode'] === 'SimpleMode') {//SimpleModeでゲーム開始した場合
-                    //中断した部屋がなく開始の場合
-                    socket.join('waitingroom_simple');
-                    const clients = io.sockets.adapter.rooms.get('waitingroom_simple');
-                    console.log('simplemode待機ルームの人のIDのセット', clients);
-                    //to get the number of clients in this room
-                    const numClients = clients ? clients.size : 0;
+                socket.emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
+                return;
+            }
 
-                    if (numClients > 1 && clients) {
-                        //nagaiもし同時にたくさん人きたら誰か同時に入ってしまいそうなので
-                        //判定処理は入れる、その部屋に入っている人の数を取得する
-                        const clientsArr = Array.from(clients);
-                        //idさえ分かれば誰でも入れるので、roomIdは推測不能な文字列に
-                        const roomId = crypto.randomUUID();
+            if (data['mode'] === 'SimpleMode') {//SimpleModeでゲーム開始した場合
+                //中断した部屋がなく開始の場合
+                socket.join('waitingroom_simple');
+                const clients = io.sockets.adapter.rooms.get('waitingroom_simple');
+                console.log('simplemode待機ルームの人のIDのセット', clients);
+                //to get the number of clients in this room
+                const numClients = clients ? clients.size : 0;
 
-                        const cl0 = io.sockets.sockets.get(clientsArr[0]);
-                        const cl1 = io.sockets.sockets.get(clientsArr[1]);
-                        if (cl0 && cl1) {
-                            //待機ルームを抜けて対戦ルームに入る
-                            cl0.leave('waitingroom_simple');
-                            cl1.leave('waitingroom_simple');
-                            cl0.join(roomId);
-                            cl1.join(roomId);
-
-                            //マッチ
-                            cl0.emit('match', roomId);
-                            cl1.emit('match', roomId);
-
-                            if (cl0.data.pubUserId === cl1.data.pubUserId) {//同一ブラウザ同士の対決、もしく同一のpubUserId同士（不正に設定）の場合
-                                cl0.data.matchUserId = cl0.data.subUserId;
-                                cl1.data.matchUserId = cl1.data.subUserId;
-                            }
-
-                            const rclients = io.sockets.adapter.rooms.get(roomId);
-                            console.log('ルーム:', roomId, 'に入っている人のIDのSet', rclients);
-                            console.log('待機ルームの人のIDのSet', clients);
-                            const rnumClients = clients ? clients.size : 0;
-                            if (rnumClients > 2) {
-                                //もし同じ部屋に二人以上入ってしまっていたら解散（そんなことがあるか分からないが）
-                                cl0.leave(roomId);
-                                cl1.leave(roomId);
-                                cl0.join('waitingroom_simple');
-                                cl1.join('waitingroom_simple');
-                                console.log('解散 ルーム:', roomId, 'の人のIDのセット', rclients);
-                                console.log('解散', '待機ルームの人のIDのセット', clients);
-                            } else {
-                                console.log('SimpleModeゲーム開始');
-                                //正常に部屋が立ったなら
-                                //ゲームに必要な情報を作成する
-                                //盤面の正解の情報,現在の盤面の状態
-                                boards[roomId] = generateStartBoard(cl0.data as socketData, cl1.data as socketData, data['mode']);
-                                io.to(roomId).emit("state", { board: boards[roomId]['board'], points: boards[roomId]['points'] });
-                                const intervalid = setInterval(function () {
-                                    boards[roomId]['countdown'] -= 1;
-                                    io.to(roomId).emit("countdown", boards[roomId]['countdown']);
-                                    if (boards[roomId]['countdown'] < 1) {
-                                        clearInterval(intervalid);
-                                    }
-                                }, 1000);
-                            }
-                        }
-                    }
-                } else if (data['mode'] === 'TurnMode') {//TurnModeでゲーム開始した場合
-                    //中断した部屋がなく開始の場合
-                    socket.join('waitingroom_turn');
-                    const clients = io.sockets.adapter.rooms.get('waitingroom_turn');
-                    console.log('turnmode待機ルームの人のIDのセット', clients);
-                    //to get the number of clients in this room
-                    const numClients = clients ? clients.size : 0;
-
-                    if (numClients > 1 && clients) {
-                        //nagaiもし同時にたくさん人きたら誰か同時に入ってしまいそうなので
-                        //判定処理は入れる、その部屋に入っている人の数を取得する
-                        const clientsArr = Array.from(clients);
-                        //idさえ分かれば誰でも入れるので、roomIdは推測不能な文字列に
-                        const roomId = crypto.randomUUID();
-
-                        const cl0 = io.sockets.sockets.get(clientsArr[0]);
-                        const cl1 = io.sockets.sockets.get(clientsArr[1]);
-                        if (cl0 && cl1) {
-                            //待機ルームを抜けて対戦ルームに入る
-                            cl0.leave('waitingroom_turn');
-                            cl1.leave('waitingroom_turn');
-                            cl0.join(roomId);
-                            cl1.join(roomId);
-
-                            //マッチ
-                            cl0.emit('match', roomId);
-                            cl1.emit('match', roomId);
-
-                            if (cl0.data.pubUserId === cl1.data.pubUserId) {//同一ブラウザ同士の対決、もしく同一のpubUserId同士（不正に設定）の場合
-                                cl0.data.matchUserId = cl0.data.subUserId;
-                                cl1.data.matchUserId = cl1.data.subUserId;
-                            }
-
-                            const rclients = io.sockets.adapter.rooms.get(roomId);
-                            console.log('ルーム:', roomId, 'に入っている人のIDのSet', rclients);
-                            console.log('待機ルームの人のIDのSet', clients);
-                            const rnumClients = clients ? clients.size : 0;
-                            if (rnumClients > 2) {
-                                //もし同じ部屋に二人以上入ってしまっていたら解散（そんなことがあるか分からないが）
-                                cl0.leave(roomId);
-                                cl1.leave(roomId);
-                                cl0.join('waitingroom_turn');
-                                cl1.join('waitingroom_turn');
-                                console.log('解散 ルーム:', roomId, 'の人のIDのセット', rclients);
-                                console.log('解散', '待機ルームの人のIDのセット', clients);
-                            } else {
-                                console.log('TurnModeゲーム開始');
-                                //正常に部屋が立ったなら
-                                //ゲームに必要な情報を作成する
-                                //盤面の正解の情報,現在の盤面の状態
-                                boards[roomId] = generateStartBoard(cl0.data as socketData, cl1.data as socketData, data['mode']);
-                                io.to(roomId).emit("state", { board: boards[roomId]['board'], points: boards[roomId]['points'] });
-
-                                //この後無限にカウントダウンが始まるようにする必要がある
-                                const intervalid = setInterval(function () {
-                                    boards[roomId]['countdown'] -= 1;
-                                    io.to(roomId).emit("countdown", boards[roomId]['countdown']);
-                                    if (boards[roomId]['countdown'] < 1) {
-                                        clearInterval(intervalid);
-                                        //nagai clearIntervalをするのはゲームが終了したとき…(or 1000カウントくらいに到達したら止める)
-                                        //ここの処理でendgameを判定してclearintervalするか、intervalidをtableに入れてendgameの処理がされたときにclearとするか？
-                                        //ここシームレスに処理を進めたくない。user1=>判定、どれもsubmitされなかったならランダムに一枚開く（不正解でも開かない）、=>プレイヤー交代
-                                        //とする。……でも結局ここはずっと回し続ければいいだけかな
-                                        //setintervalは処理が重いならそれぞれ同時に動いてしまうのでその点かなり注意して設計したい
-                                    }
-                                }, 1000);
-                            }
-                        }
-                    }
+                if (!(numClients > 1 && clients)) {
+                    //人がいない場合は、ここでreturnして終了してしまい
+                    return;
                 }
+                //nagaiもし同時にたくさん人きたら誰か同時に入ってしまいそうなので
+                //判定処理は入れる、その部屋に入っている人の数を取得する
+                const clientsArr = Array.from(clients);
+                //idさえ分かれば誰でも入れるので、roomIdは推測不能な文字列に
+                const roomId = crypto.randomUUID();
+
+                const cl0 = io.sockets.sockets.get(clientsArr[0]);
+                const cl1 = io.sockets.sockets.get(clientsArr[1]);
+                if (!(cl0 && cl1)) {
+                    //もし取得できない場合があれば即終了
+                    return;
+                }
+
+                //待機ルームを抜けて対戦ルームに入る
+                cl0.leave('waitingroom_simple');
+                cl1.leave('waitingroom_simple');
+                cl0.join(roomId);
+                cl1.join(roomId);
+
+                //マッチ
+                cl0.emit('match', roomId);
+                cl1.emit('match', roomId);
+
+                if (cl0.data.pubUserId === cl1.data.pubUserId) {//同一ブラウザ同士の対決、もしく同一のpubUserId同士（不正に設定）の場合
+                    cl0.data.matchUserId = cl0.data.subUserId;
+                    cl1.data.matchUserId = cl1.data.subUserId;
+                }
+
+                const rclients = io.sockets.adapter.rooms.get(roomId);
+                console.log('ルーム:', roomId, 'に入っている人のIDのSet', rclients);
+                console.log('待機ルームの人のIDのSet', clients);
+                const rnumClients = clients ? clients.size : 0;
+                if (rnumClients > 2) {
+                    //もし同じ部屋に二人以上入ってしまっていたら解散（そんなことがあるか分からないが）
+                    cl0.leave(roomId);
+                    cl1.leave(roomId);
+                    cl0.join('waitingroom_simple');
+                    cl1.join('waitingroom_simple');
+                    console.log('解散 ルーム:', roomId, 'の人のIDのセット', rclients);
+                    console.log('解散', '待機ルームの人のIDのセット', clients);
+                } else {
+                    console.log('SimpleModeゲーム開始');
+                    //正常に部屋が立ったなら
+                    //ゲームに必要な情報を作成する
+                    //盤面の正解の情報,現在の盤面の状態
+                    gameInfos[roomId] = generateStartGameInfo(cl0.data as socketData, cl1.data as socketData, data['mode']);
+                    io.to(roomId).emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
+                    const intervalid = setInterval(function () {
+                        gameInfos[roomId]['startCountDown'] -= 1;
+                        io.to(roomId).emit("startCountDown", gameInfos[roomId]['startCountDown']);
+                        if (gameInfos[roomId]['startCountDown'] < 1) {
+                            clearInterval(intervalid);
+                        }
+                    }, 1000);
+                }
+            } else if (data['mode'] === 'TurnMode') {//TurnModeでゲーム開始した場合
+                //中断した部屋がなく開始の場合
+                socket.join('waitingroom_turn');
+                const clients = io.sockets.adapter.rooms.get('waitingroom_turn');
+                console.log('turnmode待機ルームの人のIDのセット', clients);
+                //to get the number of clients in this room
+                const numClients = clients ? clients.size : 0;
+
+                if (!(numClients > 1 && clients)) {
+                    //人がいない場合は、ここでreturnして終了してしまい
+                    return;
+                }
+                //nagaiこれは、async-lockでやるようにする！！！！！！
+                //もし同時にたくさん人きたら誰か同時に入ってしまいそうなので
+                //判定処理は入れる、その部屋に入っている人の数を取得する
+                const clientsArr = Array.from(clients);
+                //idさえ分かれば誰でも入れるので、roomIdは推測不能な文字列に
+                const roomId = crypto.randomUUID();
+
+                const cl0 = io.sockets.sockets.get(clientsArr[0]);
+                const cl1 = io.sockets.sockets.get(clientsArr[1]);
+                if (!(cl0 && cl1)) {
+                    //もし取得できない場合があれば即終了
+                    return;
+                }
+                //待機ルームを抜けて対戦ルームに入る
+                cl0.leave('waitingroom_turn');
+                cl1.leave('waitingroom_turn');
+                cl0.join(roomId);
+                cl1.join(roomId);
+
+                //マッチ
+                cl0.emit('match', roomId);
+                cl1.emit('match', roomId);
+
+                if (cl0.data.pubUserId === cl1.data.pubUserId) {//同一ブラウザ同士の対決、もしく同一のpubUserId同士（不正に設定）の場合
+                    cl0.data.matchUserId = cl0.data.subUserId;
+                    cl1.data.matchUserId = cl1.data.subUserId;
+                }
+
+                const rclients = io.sockets.adapter.rooms.get(roomId);
+                console.log('ルーム:', roomId, 'に入っている人のIDのSet', rclients);
+                console.log('待機ルームの人のIDのSet', clients);
+                const rnumClients = clients ? clients.size : 0;
+                if (rnumClients > 2) {
+                    //もし同じ部屋に二人以上入ってしまっていたら解散（そんなことがあるか分からないが）
+                    cl0.leave(roomId);
+                    cl1.leave(roomId);
+                    cl0.join('waitingroom_turn');
+                    cl1.join('waitingroom_turn');
+                    console.log('解散 ルーム:', roomId, 'の人のIDのセット', rclients);
+                    console.log('解散', '待機ルームの人のIDのセット', clients);
+                    return;
+                }
+                console.log('TurnModeゲーム開始');
+                //正常に部屋が立ったなら
+                //ゲームに必要な情報を作成する
+                //盤面の正解の情報,現在の盤面の状態
+                gameInfos[roomId] = generateStartGameInfo(cl0.data as socketData, cl1.data as socketData, data['mode']);
+                io.to(roomId).emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
+
+                let iterCnt = 0;
+                //処理が長引く場合は１秒以上かかる。setIntervalは最悪処理が並行で走るのでsetTimeoutに
+                setTimeout(function gameCountDownFunction() {
+                    lock.acquire(roomId, function (done) {
+                        if (gameInfos[roomId]['turnModeGameEnd']) {
+                            delete gameInfos[roomId];
+                            done(undefined, true);
+                            return;
+                        }
+                        iterCnt++;
+                        if (gameInfos[roomId]['startCountDown'] > 0) {
+                            //初回のマッチ遷移後のカウントダウン
+                            gameInfos[roomId]['startCountDown'] -= 1;
+                            io.to(roomId).emit("startCountDown", gameInfos[roomId]['startCountDown']);
+                            done(undefined, true);
+                            return;//処理ここまで
+                        }
+                        //以降普通のゲーム
+                        gameInfos[roomId]['countdown'] -= 1;
+                        if (gameInfos[roomId]['countdown'] < 0) {//0より小さくなったら、次の人のターンに遷移するという一連の処理
+                            if (gameInfos[roomId]['turnIndex'] === gameInfos[roomId]['turnArray']?.length - 1) {
+                                //最後のインデックスになったら最初にする例：3->0
+                                //turnindexは最初に変える
+                                gameInfos[roomId]['turnIndex'] = 0;
+                            } else {
+                                gameInfos[roomId]['turnIndex']++;
+                            }
+                            if (gameInfos[roomId]['turnArray'][gameInfos[roomId]['turnIndex']] === 'auto') {
+                                gameInfos[roomId]['countdown'] = 5;
+                                if (gameInfos[roomId]['submitFlag']) {
+                                    //提出していたならautoでマスが開かれることはなし。
+                                    gameInfos[roomId]['submitFlag'] = false;
+                                    gameInfos[roomId]['countdown'] = 0;
+                                } else {
+                                    //memo:前のプレイヤーのターンで答えが提出されていなかったなら、autoで一枚マスが開かれる
+                                    const keys = Object.keys(gameInfos[roomId]['board']).filter(key => gameInfos[roomId]['board'][key]['val'] === '-');
+                                    const randomKey = keys[Math.floor(Math.random() * keys.length)];
+                                    const indx = parseInt(randomKey[0]) * 9 + parseInt(randomKey[1]);
+                                    gameInfos[roomId]['board'][randomKey] = { id: 'auto', val: gameInfos[roomId]['answer'][indx] };
+                                    const eventData = { status: 'auto', matchUserId: 'auto', val: gameInfos[roomId]['answer'][indx], coordinate: randomKey };
+                                    io.to(roomId).emit("event", eventData);
+                                    io.to(roomId).emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
+                                }
+                            } else {
+                                gameInfos[roomId]['countdown'] = 5;
+                            }
+                        }
+                        io.to(roomId).emit("turnCount", { countdown: gameInfos[roomId]['countdown'], turnUserId: gameInfos[roomId]['turnArray'][gameInfos[roomId]['turnIndex']] });
+
+                        // 終了検知
+                        let endgame = true;
+                        Object.keys(gameInfos[roomId]['board']).forEach(key => {
+                            if (gameInfos[roomId]['board'][key]['val'] === '-') {
+                                endgame = false;
+                            }
+                        });
+                        if (endgame === true) {
+                            console.log('ルーム:', roomId, 'のゲーム終了');
+                            (async () => {
+                                //非同期でレートを更新する。
+                                //部屋に入っている二人のユーザーに対してメモリに持っているCosmosのオブジェクトを更新、CosmosDBを更新
+                                const mUserIds = Object.keys(gameInfos[roomId]['idTableMatchPub']);
+                                const pUser0Id = gameInfos[roomId]['idTableMatchPub'][mUserIds[0]];
+                                const pUser1Id = gameInfos[roomId]['idTableMatchPub'][mUserIds[1]];
+
+                                const diffrate = gameInfos[roomId]['points'][mUserIds[0]] - gameInfos[roomId]['points'][mUserIds[1]];
+                                usersCosmos[pUser0Id]['rate'] += diffrate;
+                                usersCosmos[pUser1Id]['rate'] -= diffrate;
+                                const ranking: { id: string; rate: number, userId: string, name: string }[] = Object.values(usersCosmos);
+                                io.to(roomId).emit('ranking', ranking);
+                                try {
+                                    await container.items.upsert(usersCosmos[pUser0Id]);
+                                    await container.items.upsert(usersCosmos[pUser1Id]);
+                                } catch (error) {
+                                    console.error(error);
+                                }
+                                delete gameInfos[roomId];
+                            })();
+                            //処理終了
+                            done(undefined, false);
+                            return;
+                        }
+                        if (iterCnt > 1000) {
+                            //1000回超えるようなことがあればそれは普通ありえないので
+                            //強制的にストップ
+                            done(undefined, false);
+                            return;
+                        }
+                        done(undefined, true);
+                    }).then(function (res) {
+                        if(res !== true){
+                            return;
+                        }
+                        // ロック内で呼び出していたと挙動がおかしかった気がするため。ロック解除されてから次を呼ぶ
+                        setTimeout(gameCountDownFunction, 1000);
+                    }).catch((err) => {
+                        console.log('nagai 確認err', err);
+                    });
+                }, 1000);
             }
         });
 
         //クライアントから受けた数独提出答え受け取り用
+        //SimpleMode
         socket.on('submit', function (submitInfo) {
             console.log('submitInfo: ', submitInfo);
             check(submitInfo, socket);
+        });
+        //クライアントから受けた数独提出答え受け取り用
+        socket.on('submitTurnModeAnswer', function (submitInfo) {
+            console.log('submitInfo: ', submitInfo);
+            checkTurnModeAnswer(submitInfo, socket);
         });
         socket.on('myselect', function (data) {
             //自分が選択しているところの座標を相手にだけ送る
@@ -401,7 +523,6 @@ async function main() {
             });
             //io.emit('message', msg);//ブロードキャスト
         });
-
     });
 
     server.listen(PORT, function () {
@@ -415,7 +536,7 @@ async function main() {
      * @param 
      * @returns 
      */
-    function generateStartBoard(data0: socketData, data1: socketData, mode: mode) {
+    function generateStartGameInfo(data0: socketData, data1: socketData, mode: mode) {
         const problemnum = getRandomInt(500);
         const startboard = problemlines[problemnum];
         const answer = answerlines[problemnum];
@@ -439,16 +560,20 @@ async function main() {
         const rtobj: gameInfo = {
             board: board,
             answer: answer, points: { [data0.matchUserId]: 0, [data1.matchUserId]: 0 },
-            logs: [], countdown: 6,
+            logs: [], startCountDown: 6,
             idTable: { [data0.userId]: data0.matchUserId, [data1.userId]: data1.matchUserId },
             idTableMatchPub: { [data0.matchUserId]: data0.pubUserId, [data1.matchUserId]: data1.pubUserId },
             mode: mode
         };
-        // if (mode === 'TurnMode') {
-        //     const index = getRandomInt(2);
-        //     const users = [mUserId1, mUserId2];
-        //     rtobj['whichTurnUserId'] = users[index];
-        // }
+        if (mode === 'TurnMode') {
+            const data = [data0.matchUserId, data1.matchUserId];
+            data.sort(() => Math.random() - 0.5);//ランダムに並び替える
+            data.splice(1, 0, 'auto');
+            data.push('auto');
+            rtobj['turnArray'] = data;
+            rtobj['turnIndex'] = 0;
+            rtobj['countdown'] = 15;
+        }
         return rtobj;
     }
 
@@ -459,8 +584,9 @@ async function main() {
      */
     function check(submitInfo: { roomId: string, coordinate: string, val: string }, socket: socketio.Socket) {
         const rmid = submitInfo['roomId'];
-        if (boards[rmid]['countdown'] > 0) {
+        if (gameInfos[rmid]['startCountDown'] > 0) {
             console.log('カウントダウン中のため入力棄却');
+            return;
         }
         const cod = submitInfo['coordinate'];
         const val: string = submitInfo['val'];
@@ -468,28 +594,28 @@ async function main() {
         const matchUserId = socket.data.matchUserId;
 
         let eventData;
-        if (boards[rmid]['answer'][indx] === val && boards[rmid]['board'][cod]['val'] === '-') {//まだ値が入っていないものに対して
+        if (gameInfos[rmid]['answer'][indx] === val && gameInfos[rmid]['board'][cod]['val'] === '-') {//まだ値が入っていないものに対して
             //正解の場合
             console.log('正解');
-            boards[rmid]['board'][cod]['val'] = val;
-            boards[rmid]['board'][cod]['id'] = matchUserId;
-            boards[rmid]['points'][matchUserId] += parseInt(val);
+            gameInfos[rmid]['board'][cod]['val'] = val;
+            gameInfos[rmid]['board'][cod]['id'] = matchUserId;
+            gameInfos[rmid]['points'][matchUserId] += parseInt(val);
             eventData = { status: 'correct', matchUserId: matchUserId, val: val, coordinate: cod };
-            boards[rmid]['logs'].push(eventData);
-        } else if (boards[rmid]['board'][cod]['val'] === '-') {
+            gameInfos[rmid]['logs'].push(eventData);
+        } else if (gameInfos[rmid]['board'][cod]['val'] === '-') {
             console.log('不正解');
             //不正解の場合減点
-            boards[rmid]['points'][matchUserId] -= parseInt(val);
+            gameInfos[rmid]['points'][matchUserId] -= parseInt(val);
             eventData = { status: 'incorrect', matchUserId: matchUserId, val: val, coordinate: cod };
-            boards[rmid]['logs'].push(eventData);
+            gameInfos[rmid]['logs'].push(eventData);
         }
         io.to(rmid).emit('event', eventData);
-        io.to(rmid).emit("state", { board: boards[rmid]['board'], points: boards[rmid]['points'] });
+        io.to(rmid).emit("state", { board: gameInfos[rmid]['board'], points: gameInfos[rmid]['points'] });
 
         // 終了検知
         let endgame = true;
-        Object.keys(boards[rmid]['board']).forEach(key => {
-            if (boards[rmid]['board'][key]['val'] === '-') {
+        Object.keys(gameInfos[rmid]['board']).forEach(key => {
+            if (gameInfos[rmid]['board'][key]['val'] === '-') {
                 endgame = false;
             }//nagai foreachを途中でやめることはできないらしい……無駄すぎるがとりあえず
         });
@@ -501,11 +627,11 @@ async function main() {
             (async () => {
                 //非同期でレートを更新する。
                 //部屋に入っている二人のユーザーに対してメモリに持っているCosmosのオブジェクトを更新、CosmosDBを更新
-                const mUserIds = Object.keys(boards[rmid]['idTableMatchPub']);
-                const pUser0Id = boards[rmid]['idTableMatchPub'][mUserIds[0]];
-                const pUser1Id = boards[rmid]['idTableMatchPub'][mUserIds[1]];
+                const mUserIds = Object.keys(gameInfos[rmid]['idTableMatchPub']);
+                const pUser0Id = gameInfos[rmid]['idTableMatchPub'][mUserIds[0]];
+                const pUser1Id = gameInfos[rmid]['idTableMatchPub'][mUserIds[1]];
 
-                const diffrate = boards[rmid]['points'][mUserIds[0]] - boards[rmid]['points'][mUserIds[1]];
+                const diffrate = gameInfos[rmid]['points'][mUserIds[0]] - gameInfos[rmid]['points'][mUserIds[1]];
                 usersCosmos[pUser0Id]['rate'] += diffrate;
                 usersCosmos[pUser1Id]['rate'] -= diffrate;
                 const ranking: { id: string; rate: number, userId: string, name: string }[] = Object.values(usersCosmos);
@@ -516,13 +642,63 @@ async function main() {
                 } catch (error) {
                     console.error(error);
                 }
-                delete boards[rmid];
+                delete gameInfos[rmid];
             })();
         }
     }
-    function getRandomInt(max: number) {
-        return Math.floor(Math.random() * max);
-    }
 
+    /**
+ * 提出された回答を判定して、二人のユーザーに結果送信
+ * TurnMode用
+ * roomIdでロックを取得した
+ * @param submitInfo 
+ * @param socket 
+ */
+    function checkTurnModeAnswer(submitInfo: { roomId: string, coordinate: string, val: string }, socket: socketio.Socket) {
+        const rmid = submitInfo['roomId'];
+        lock.acquire(rmid, function () {
+            if (gameInfos[rmid]['startCountDown'] > 0) {
+                console.log('カウントダウン中のため入力棄却');
+                return;
+            }
+            if (gameInfos[rmid]['turnArray'][gameInfos[rmid]['turnIndex']] === socket.data.matchUserId) {
+                const cod = submitInfo['coordinate'];
+                const val: string = submitInfo['val'];
+                const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
+                const matchUserId = socket.data.matchUserId;
+
+                gameInfos[rmid]['submitFlag'] = true;
+
+                let eventData;
+                if (gameInfos[rmid]['answer'][indx] === val && gameInfos[rmid]['board'][cod]['val'] === '-'
+                    && gameInfos[rmid]['countdown'] > -1) {//まだ値が入っていないものに対して
+                    //正解の場合
+                    console.log('正解');
+                    gameInfos[rmid]['board'][cod]['val'] = val;
+                    gameInfos[rmid]['board'][cod]['id'] = matchUserId;
+                    gameInfos[rmid]['points'][matchUserId] += parseInt(val);
+                    gameInfos[rmid]['countdown'] += 10;//正解したら+10秒
+                    eventData = { status: 'correct', matchUserId: matchUserId, val: val, coordinate: cod };
+                    gameInfos[rmid]['logs'].push(eventData);
+                } else if (gameInfos[rmid]['board'][cod]['val'] === '-') {
+                    console.log('不正解');
+                    //不正解の場合減点
+                    gameInfos[rmid]['points'][matchUserId] -= parseInt(val);
+                    gameInfos[rmid]['countdown'] = -1;
+                    eventData = { status: 'incorrect', matchUserId: matchUserId, val: val, coordinate: cod };
+                    gameInfos[rmid]['logs'].push(eventData);
+                }
+                io.to(rmid).emit('event', eventData);
+                io.to(rmid).emit("state", { board: gameInfos[rmid]['board'], points: gameInfos[rmid]['points'] });
+            } else {
+                //自分のターンではない
+                console.log('対象のユーザーのターンでないため入力棄却');
+            }
+        });
+    }
 }
 main().catch(e => { console.log(e); });
+
+function getRandomInt(max: number) {
+    return Math.floor(Math.random() * max);
+}

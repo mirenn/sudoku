@@ -36,15 +36,29 @@ input.addEventListener('input', (event) => {
 let ranking;
 
 /*state情報を一応持つ。
-ただし、保存した盤面情報は特に使用しない
+ただし、保存した盤面情報を別のところで用いることはしていない
 */
 let state = null;
+
+/**
+ *  { countdown: number, turnUserId: string }
+ */
+let turnCntId;
 
 /* global io */
 var socketio = io();
 
-//0でないと数独の答え提出処理は走らない
-let countdown = 0;
+/**
+ * simplemodeでは、0でないと数独の答え提出処理は走らない 
+ * turnmodeでは、最初はそうだが後から違う
+ */
+let startCountDown = 0;
+
+/**
+ * gamemode
+ */
+let gameMode = '';
+
 //空の数独マスにイベント追加
 render_empty_board();
 
@@ -78,7 +92,7 @@ if (singlePlayState) {//保存されているものがあるのならそれを�
         socketio.emit('requestsingleplay');
     }
 }
-//一人用の場合
+//一人用のゲーム盤面要求
 socketio.on('singleplay', function (data) {
     console.log('nagai 一人用の場合のデータ', data);
     singlePlayState = data;
@@ -195,16 +209,23 @@ socketio.on('match', function (rid) {
     }
 });
 //マッチ後のカウントダウン
-socketio.on('countdown', function (num) {
-    countdown = num;
+socketio.on('startCountDown', function (num) {
+    startCountDown = num;
     $('#disp2').text('マッチしました。あと' + String(num) + '秒で開始します。');
     if (num < 1) {
         $('#disp2').text('Start');
-        $(".numbutton").removeClass("glayout");
+        const elements = document.getElementsByClassName('numbutton');
+        for (let i = 0; i < elements.length; i++) {
+            elements[i].classList.remove("glayout");
+        }
     } else {
-        $(".numbutton").addClass("glayout");
+        const elements = document.getElementsByClassName('numbutton');
+        for (let i = 0; i < elements.length; i++) {
+            elements[i].classList.add("glayout");
+        }
     }
 });
+
 //チャット送信
 $('#message_form').submit(function () {
     socketio.emit('message', $('#input_msg').val());
@@ -227,7 +248,9 @@ socketio.on('opponentSelect', function (data) {
         document.getElementById(data).classList.add('opoClick');
     }
 });
-//ゲームのイベント
+/**
+ * {status: string,matchUserId: string,val: string,coordinate: string}
+ */
 socketio.on('event', function (eventData) {
     if (eventData.status === 'incorrect') {
         //自分が不正解だった場合&& (eventData.matchUserId === pubUserId || eventData.matchUserId === subUserId)
@@ -242,12 +265,29 @@ socketio.on('event', function (eventData) {
             document.getElementById(eventData.coordinate).classList.remove('cross');
         }, 1000);
     }
+    if (eventData.status === 'auto' && gameMode === 'TurnMode') {//autoがそもそもturnmode限定
+        //今は文字を画面に表示しているだけなので文字列で送ってくるだけで良い……。
+        const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
+        const nyuuryoku = eventData.val;
+        const log = '自動展開' + ':' + zahyo + '：' + nyuuryoku;
+        const txarea = document.getElementById('log');
+        txarea.value += log + "\n";
+        txarea.scrollTop = txarea.scrollHeight;
+        //autoで開かれた箇所の枠線は１秒間枠を太くする
+        document.getElementById(eventData.coordinate).classList.add('hutoiborder');
+        setTimeout(function () {
+            document.getElementById(eventData.coordinate).classList.remove('hutoiborder');
+        }, 1000);
+        document.getElementById('disp2').textContent = '自動展開' + ':' + zahyo + '：' + nyuuryoku;
+        return;//autoなら処理ここまで
+    }
+
     //今は文字を画面に表示しているだけなので文字列で送ってくるだけで良い……。
     const who = (eventData.matchUserId === pubUserId || eventData.matchUserId === subUserId) ? '自分' : '相手';
     const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
     const seigo = eventData.status === 'correct' ? '正解' : '不正解';
     const nyuuryoku = eventData.val;
-    const log = seigo + ':' + who + ' ' + nyuuryoku + ' ' + zahyo;
+    const log = seigo + ':' + who + ' ' + zahyo + '：' + nyuuryoku;
     const txarea = document.getElementById('log');
     txarea.value += log + "\n";
     txarea.scrollTop = txarea.scrollHeight;
@@ -285,10 +325,43 @@ socketio.on("state", function (data) {
     }
     scoreProcess(points, endgame);
 });
-//接続エラー時のイベントらしい
-socketio.on("error", (error) => {
-    // ...
+
+//TurnMode用。ゲーム進行カウントダウン
+//nagai:ゲーム終了してもカウント進んでいたので修正する
+socketio.on("turnCount", (data) => {
+    if (data.turnUserId === pubUserId | data.turnUserId === subUserId) {
+        const elements = document.getElementsByClassName('numbutton');
+        for (var i = 0; i < elements.length; i++) {
+            elements[i].classList.remove("glayout");
+        }
+    } else {
+        const elements = document.getElementsByClassName('numbutton');
+        for (let i = 0; i < elements.length; i++) {
+            elements[i].classList.add("glayout");
+        }
+    }
+    if (startCountDown > 0) {
+        return;
+    }
+
+    let who;
+    if (data.turnUserId === pubUserId | data.turnUserId === subUserId) {
+        who = '自分のターン';
+    } else if (data.turnUserId === 'auto' && data.countdown < 4 ) {
+        who = 'オート';
+        return;
+    } else {
+        who = '相手のターン'
+    }
+    let dispmessage = who + '残り秒数' + data.countdown;
+    document.getElementById('disp2').textContent = dispmessage;
+    turnCntId = data;
+});
+
+//接続エラー時のイベント
+socketio.on('connect_error', (error) => {
     console.log('nagai error テスト確認', error);
+    document.getElementById('disp2').textContent = 'サーバーと通信ができなくなりました';
 });
 
 // クリックされた要素を保持
@@ -317,15 +390,14 @@ button.onclick = goGameButtonClick;
 function goGameButtonClick(e) {
     const el = document.getElementsByName('modeRadio');
     const len = el.length;
-    let checkValue = '';
     for (let i = 0; i < len; i++) {
         if (el.item(i).checked) {
-            checkValue = el.item(i).value;
+            gameMode = el.item(i).value;
         }
     }
     document.getElementById('waiting_disp').classList.remove('d-none');
     document.getElementById('name_button').classList.add('d-none');
-    socketio.emit("gogame", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value, mode: checkValue });
+    socketio.emit("gogame", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value, mode: gameMode });
 }
 
 // 問題パネルのマスが押された時の処理
@@ -393,8 +465,23 @@ function selectClick(e) {
         if (s_endgame) {
             socketio.emit('requestsingleplay');
         }
-    } else {
-        if (countdown > 0) return;//カウントダウン中に押してもすぐ終了
+    } else if (gameMode === 'TurnMode') {
+        if (startCountDown > 0) return;//カウントダウン中に押してもすぐ終了
+        if (document.getElementsByClassName("sudokuClick")[0] === undefined || document.getElementsByClassName("sudokuClick")[0].textContent != "-") { return; }
+
+        if (document.getElementsByClassName('sudokuClick').length > 0) {
+            let submitInfo = {
+                roomId: roomId,
+                coordinate: document.getElementsByClassName('sudokuClick')[0].id,
+                val: e.target.textContent
+            };
+            console.log('nagai submitInfo', submitInfo);
+            socketio.emit('submitTurnModeAnswer', submitInfo);
+        }
+    }
+    else {
+        //SinmpleMode
+        if (startCountDown > 0) return;//カウントダウン中に押してもすぐ終了
         if (document.getElementsByClassName("sudokuClick")[0] === undefined || document.getElementsByClassName("sudokuClick")[0].textContent != "-") { return; }
         let datas = document.getElementById("sudoku").querySelectorAll("tr");
         //for文回さなくても選択しているマスはclassで分かるのでそのうち書き換える……
@@ -403,7 +490,7 @@ function selectClick(e) {
                 if (datas[i].querySelectorAll("td")[j].classList.contains("sudokuClick")) {
                     let cd = String(i) + String(j);
                     //送信処理//答え送信
-                    let submitInfo = { roomId: roomId,coordinate: cd, val: e.target.textContent };
+                    let submitInfo = { roomId: roomId, coordinate: cd, val: e.target.textContent };
                     console.log('nagai submitInfo', submitInfo);//nagai 連打対策はしておいた方がよさそう
                     socketio.emit('submit', submitInfo);
                     break outer_loop;
@@ -411,7 +498,6 @@ function selectClick(e) {
             }
         }
     }
-
 }
 
 // 点数処理
