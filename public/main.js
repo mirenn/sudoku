@@ -397,7 +397,11 @@ function goGameButtonClick(e) {
     }
     document.getElementById('waiting_disp').classList.remove('d-none');
     document.getElementById('name_button').classList.add('d-none');
-    socketio.emit("gogame", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value, mode: gameMode });
+    if(gameMode === 'SimpleMode'){
+        socketio.emit("gogameSimpleMode", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value});
+    }else if(gameMode === 'TurnMode'){
+        socketio.emit("gogameTurnMode", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value});
+    }
 }
 
 // 問題パネルのマスが押された時の処理
@@ -492,7 +496,7 @@ function selectClick(e) {
                     //送信処理//答え送信
                     let submitInfo = { roomId: roomId, coordinate: cd, val: e.target.textContent };
                     console.log('nagai submitInfo', submitInfo);//nagai 連打対策はしておいた方がよさそう
-                    socketio.emit('submit', submitInfo);
+                    socketio.emit('submitSimpleMode', submitInfo);
                     break outer_loop;
                 }
             }

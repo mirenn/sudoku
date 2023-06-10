@@ -61,87 +61,28 @@ https://icooon-mono.com/11343-%e3%83%aa%e3%82%b9%e3%81%ae%e3%82%a2%e3%82%a4%e3%8
 ボタンとニックネームに関しては横並びのが良かったので
 直す
 
-
-
-else if (data['mode'] === 'TurnMode') {
-                    //TurnModeでゲーム開始した場合
-
-                    //中断した部屋がなく開始の場合
-                    socket.join('waitingroom_turn');
-                    const clients = io.sockets.adapter.rooms.get('waitingroom_turn');
-                    console.log('turnmode待機ルームの人のIDのセット', clients);
-                    //to get the number of clients in this room
-                    const numClients = clients ? clients.size : 0;
-
-                    if (numClients > 1 && clients) {
-                        //nagaiもし同時にたくさん人きたら誰か同時に入ってしまいそうなので
-                        //判定処理は入れる、その部屋に入っている人の数を取得する
-                        const clientsArr = Array.from(clients);
-                        //idさえ分かれば誰でも入れるので、roomIdは推測不能な文字列に
-                        const roomId = crypto.randomUUID();
-
-                        const cl0 = io.sockets.sockets.get(clientsArr[0]);
-                        const cl1 = io.sockets.sockets.get(clientsArr[1]);
-                        if (cl0 && cl1) {
-                            //待機ルームを抜けて対戦ルームに入る
-                            cl0.leave('waitingroom_turn');
-                            cl1.leave('waitingroom_turn');
-                            cl0.join(roomId);
-                            cl1.join(roomId);
-
-                            //マッチ
-                            //io.to(clientsArr[0]).emit('match', roomId);
-                            //io.to(clientsArr[1]).emit('match', roomId);
-                            cl0.emit('match', roomId);
-                            cl1.emit('match', roomId);
-
-                            if (cl0.data.pubUserId === cl1.data.pubUserId) {//同一ブラウザ同士の対決、もしく同一のpubUserId同士（不正に設定）の場合
-                                cl0.data.matchUserId = cl0.data.subUserId;
-                                cl1.data.matchUserId = cl1.data.subUserId;
-                            }
-
-                            const rclients = io.sockets.adapter.rooms.get(roomId);
-                            console.log('ルーム:', roomId, 'に入っている人のIDのSet', rclients);
-                            console.log('待機ルームの人のIDのSet', clients);
-                            const rnumClients = clients ? clients.size : 0;
-                            if (rnumClients > 2) {
-                                //もし同じ部屋に二人以上入ってしまっていたら解散（そんなことがあるか分からないが）
-                                cl0.leave(roomId);
-                                cl1.leave(roomId);
-                                cl0.join('waitingroom_turn');
-                                cl1.join('waitingroom_turn');
-                                console.log('解散 ルーム:', roomId, 'の人のIDのセット', rclients);
-                                console.log('解散', '待機ルームの人のIDのセット', clients);
-                            } else {
-                                console.log('TurnModeゲーム開始');
-                                //正常に部屋が立ったなら
-                                //ゲームに必要な情報を作成する
-                                //盤面の正解の情報,現在の盤面の状態
-                                boards[roomId] = generateStartBoard(cl0.data.matchUserId, cl1.data.matchUserId, data['mode']);
-                                const state = (({ board, points }) => { return { board, points } })(boards[roomId]);
-                                io.to(roomId).emit("state", state);
-                                socket.data.readBoard = structuredClone(state['board']);
-
-                                //この後無限にカウントダウンが始まるようにする必要がある
-                                const intervalid = setInterval(function () {
-                                    boards[roomId]['countdown'] -= 1;
-                                    io.to(roomId).emit("countdown", boards[roomId]['countdown']);
-                                    if (boards[roomId]['countdown'] < 1) {
-                                        clearInterval(intervalid);
-                                        //nagai clearIntervalをするのはゲームが終了したとき…(or 1000カウントくらいに到達したら止める)
-                                        //ここの処理でendgameを判定してclearintervalするか、intervalidをtableに入れてendgameの処理がされたときにclearとするか？
-                                        //ここシームレスに処理を進めたくない。user1=>判定、どれもsubmitされなかったならランダムに一枚開く（不正解でも開かない）、=>プレイヤー交代
-                                        //とする。……でも結局ここはずっと回し続ければいいだけかな
-                                        //setintervalは処理が重いならそれぞれ同時に動いてしまうのでその点かなり注意して設計したい
-                                    }
-                                }, 1000);
-                            }
-                        }
-                    }
-                }
-
 みすった……
 pubUserIdに他人のものを入れた場合成り代わることができる。
 成り代わるというのはrankingを自分のものにできるということ。
 pubUserIdとuserIdで一意なものにすれば成り代わりは防げる。
 別アカウント扱いにできる。
+
+
+    //データが何一つないときは以下ソースでINSERT
+    // const items = [
+    //     {
+    //         "pk": "A",
+    //         "id": '838c8664-f99c-4d03-a90b-3935944005c4',
+    //         "name": 'nagainame',
+    //         "rate": 1500
+    //     }];
+    // Create all items
+    // for (const item of items) {
+    //     const { resource } = await container.items.create(item);
+    //     console.log(resource, ' inserted');
+    // }
+
+        // ディレクトリでindex.htmlをリク・レス
+    // app.get('/', (req, res) => {
+    //     res.sendFile(__dirname  + '/public/index.html');
+    //   });
