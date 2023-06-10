@@ -40,11 +40,6 @@ let ranking;
 */
 let state = null;
 
-/**
- *  { countdown: number, turnUserId: string }
- */
-let turnCntId;
-
 /* global io */
 var socketio = io();
 
@@ -180,28 +175,24 @@ socketio.on('match', function (rid) {
     singlePlayFlag = false;
     state = null;//初期化
     /////色をつけるクラスはずして初期化
-    const opoele = document.getElementsByClassName('opponent');
-    while (opoele.length) {
-        opoele[0].classList.remove('opponent');
-    }
-    const ownele = document.getElementsByClassName('own');
-    while (ownele.length) {
-        ownele[0].classList.remove('own');
-    }
-    const opocliele = document.getElementsByClassName('opoClick');
-    while (opocliele.length) {
-        opocliele[0].classList.remove('opoClick');
-    }
-    //////
-    roomId = rid;
-    localStorage.setItem('roomId', roomId);
-    //非表示
-    document.getElementById('waiting_disp').classList.add('d-none');//対戦街接続中
-    document.getElementById('waiting_num').classList.add('d-none');//現在の総接続人数
-    //表示
-    document.getElementById('dashboard').classList.remove('d-none');
-    document.getElementById('disp2').classList.remove('d-none');
+    removeClass();
 
+    if (gameMode !== 'InfiniteMode') {
+        roomId = rid;
+        localStorage.setItem('roomId', roomId);
+        //表示
+        document.getElementById('dashboard').classList.remove('d-none');
+        document.getElementById('disp2').classList.remove('d-none');
+    } else {
+        roomId = null;
+        localStorage.setItem('roomId', roomId);
+        //表示
+        //document.getElementById('dashboard').classList.remove('d-none');
+        document.getElementById('disp2').classList.remove('d-none');
+    }
+    //非表示
+    document.getElementById('waiting_disp').classList.add('d-none');//対戦待ち接続中
+    document.getElementById('waiting_num').classList.add('d-none');//現在の総接続人数
     //チャットクリア
     const list = document.getElementById("messages");
     while (list.firstChild) {
@@ -296,7 +287,7 @@ socketio.on('event', function (eventData) {
 //全盤面:どこのマスが誰に開けられているか
 //プレイヤーの状態:お手付きに入っているかなど(これは後回し)
 //現在見えている盤面と相違があるデータを取得した瞬間に色をつける
-socketio.on("state", function (data) {
+socketio.on('state', function (data) {
     //json形式（通信量的に無駄は多いし、json.parseなどは重いので余裕があったら変更する）
     state = data;
     //console.log('nagai state', state);
@@ -326,6 +317,35 @@ socketio.on("state", function (data) {
     scoreProcess(points, endgame);
 });
 
+socketio.on('stateInfiniteMode', function (data) {
+    state = data;
+
+    let bData = state['board'];
+    let points = state['points'];
+    let endgame = true;
+
+    for (let i = 0; i < 9; i++) {
+        for (let j = 0; j < 9; j++) {
+            let bkey = String(i) + String(j);
+            //値に変更があった場合、値をセットする
+            if (document.getElementById(bkey).textContent != bData[bkey].val) {
+                document.getElementById(bkey).textContent = bData[bkey].val;
+                if (bData[bkey].id === pubUserId || bData[bkey].id === subUserId) {
+                    //classをつける
+                    document.getElementById(bkey).classList.add('own');
+                } else if (bData[bkey].id !== 'auto' && bData[bkey].id !== 'mada') {
+                    document.getElementById(bkey).classList.add('opponent');
+                }
+            }
+            if (bData[bkey].val === '-') {
+                endgame = false;
+            }
+        }
+    }
+    if (endgame) {
+        removeClass();
+    }
+});
 //TurnMode用。ゲーム進行カウントダウン
 //nagai:ゲーム終了してもカウント進んでいたので修正する
 socketio.on("turnCount", (data) => {
@@ -355,16 +375,30 @@ socketio.on("turnCount", (data) => {
     }
     let dispmessage = who + '残り秒数' + data.countdown;
     document.getElementById('disp2').textContent = dispmessage;
-    turnCntId = data;
 });
-
+/** {matchUserIdのuuid : id} */
+const opoHover = {};
+/** { id: string, matchUserId: string} */
 socketio.on("hoverServer", function (data) {
-    const elements = document.querySelectorAll('.opohover');
-    elements.forEach(element => {
-        element.classList.remove('opohover');
-    });
-    if(data.id !== ''){
-        document.getElementById(data.id).classList.add('opohover');
+    if (gameMode === 'InfiniteMode') {
+        if (data.matchUserId in opoHover) {
+            const el = document.getElementById(opoHover[data.matchUserId]);
+            if (el) {
+                el.classList.remove('opohover');
+            }
+        }
+        opoHover[data.matchUserId] = data.id;
+        if (data.id !== '') {
+            document.getElementById(data.id).classList.add('opohover');
+        }
+    } else {
+        const elements = document.querySelectorAll('.opohover');
+        elements.forEach(element => {
+            element.classList.remove('opohover');
+        });
+        if (data.id !== '') {
+            document.getElementById(data.id).classList.add('opohover');
+        }
     }
 });
 
@@ -387,13 +421,11 @@ function render_empty_board() {
             socketio.emit("hover", { id: e.target.id });
         });
         td.addEventListener("click", (e) => {
-            console.log("nagai click", e.target.textContent);
             sudokuClick(e);
         }, false);
     });
-    document.querySelector('#sudoku').addEventListener('mouseleave', function() {
-        // do something
-        socketio.emit('hover', {id : ''});
+    document.querySelector('#sudoku').addEventListener('mouseleave', function () {
+        socketio.emit('hover', { id: '' });
     });
 
     for (let i = 1; i < 10; i++) {
@@ -419,6 +451,8 @@ function goGameButtonClick(e) {
         socketio.emit("gogameSimpleMode", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value });
     } else if (gameMode === 'TurnMode') {
         socketio.emit("gogameTurnMode", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value });
+    } else if (gameMode === 'InfiniteMode') {
+        socketio.emit("gogameInfiniteMode", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value });
     }
 }
 
@@ -498,31 +532,37 @@ function selectClick(e) {
                 val: e.target.textContent
             };
             console.log('nagai submitInfo', submitInfo);
-            socketio.emit('submitTurnModeAnswer', submitInfo);
+            socketio.emit('submitTurnMode', submitInfo);
         }
     }
-    else {
+    else if (gameMode === 'SimpleMode') {
         //SinmpleMode
         if (startCountDown > 0) return;//カウントダウン中に押してもすぐ終了
         if (document.getElementsByClassName("myClick")[0] === undefined || document.getElementsByClassName("myClick")[0].textContent != "-") { return; }
-        let datas = document.getElementById("sudoku").querySelectorAll("tr");
-        //for文回さなくても選択しているマスはclassで分かるのでそのうち書き換える……
-        outer_loop: for (let i = 0; i < datas.length; i++) {
-            for (let j = 0; j < datas[i].querySelectorAll("td").length; j++) {
-                if (datas[i].querySelectorAll("td")[j].classList.contains("myClick")) {
-                    let cd = String(i) + String(j);
-                    //送信処理//答え送信
-                    let submitInfo = { roomId: roomId, coordinate: cd, val: e.target.textContent };
-                    console.log('nagai submitInfo', submitInfo);//nagai 連打対策はしておいた方がよさそう
-                    socketio.emit('submitSimpleMode', submitInfo);
-                    break outer_loop;
-                }
-            }
+        if (document.getElementsByClassName('myClick').length > 0) {
+            let submitInfo = {
+                roomId: roomId,
+                coordinate: document.getElementsByClassName('myClick')[0].id,
+                val: e.target.textContent
+            };
+            console.log('nagai submitInfo', submitInfo);
+            socketio.emit('submitSimpleMode', submitInfo);
+        }
+    } else if (gameMode === 'InfiniteMode') {
+        if (document.getElementsByClassName("myClick")[0] === undefined || document.getElementsByClassName("myClick")[0].textContent != "-") { return; }
+        if (document.getElementsByClassName('myClick').length > 0) {
+            let submitInfo = {
+                roomId: roomId,
+                coordinate: document.getElementsByClassName('myClick')[0].id,
+                val: e.target.textContent
+            };
+            console.log('nagai submitInfo', submitInfo);
+            socketio.emit('submitInfiniteMode', submitInfo);
         }
     }
 }
 
-// 点数処理
+/**点数処理 */
 function scoreProcess(points, endgame) {
     let mypoint = 0;
     let opopoint = 0;
@@ -552,5 +592,26 @@ function scoreProcess(points, endgame) {
         roomId = null;//nagai本当にこれで良いか？
 
         document.getElementById('name_button').classList.remove('d-none');
+    }
+}
+
+/**色をつけるクラスはずして初期化 */
+function removeClass() {
+    /////色をつけるクラスはずして初期化
+    const opoele = document.getElementsByClassName('opponent');
+    while (opoele.length) {
+        opoele[0].classList.remove('opponent');
+    }
+    const opohv = document.getElementsByClassName('opohover');
+    while (opohv.length) {
+        opohv[0].classList.remove('opohover');
+    }
+    const ownele = document.getElementsByClassName('own');
+    while (ownele.length) {
+        ownele[0].classList.remove('own');
+    }
+    const opocliele = document.getElementsByClassName('opoClick');
+    while (opocliele.length) {
+        opocliele[0].classList.remove('opoClick');
     }
 }
