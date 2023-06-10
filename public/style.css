@@ -33,10 +33,6 @@ body {
     pointer-events: none;
 }
 
-.clickenable {
-    color: #6091d3;
-}
-
 table {
     border-collapse: collapse;
     text-align: center;
@@ -74,34 +70,6 @@ table {
     height: 40px;
     position: relative;
 }
-
-.sudoku td:hover:not(.sudokuClick) {
-    /*クリックしたらホバークラスはつけない*/
-    background-color: #cee8ce;
-}
-
-.own {
-    background-color: #a3ffa3;
-}
-
-.opponent {
-    background-color: #f5d1fb;
-}
-
-.opoClick {
-    background-color: #d5bdd9;
-}
-
-/* .main td:hover:after {
-    content: "";
-    background-color: #f3ece3;
-    width: 100%;
-    height: 200vh;
-    position: absolute;
-    top: -100vh;
-    left: 0;
-    z-index: -1;
-} */
 
 .select td:hover,
 .box div:hover {
@@ -146,16 +114,39 @@ table {
     height: 40px;
 }
 
-.sudokuClick {
-    background-color: #d9ffd9;
-    /*#f3ece3;*/
+.opohover {
+    background-color: #e2d5e4;
 }
 
-.sudokuClick.own {
+.opoClick {
+    background-color: #d5bdd9;
+}
+
+.myClick {
+    background-color: #d9ffd9;
+}
+
+.own {
+    background-color: #a3ffa3;
+}
+
+.opponent {
+    background-color: #f5d1fb;
+}
+
+.sudoku td:hover:not(.myClick) {
+    /*クリックしたらホバークラスはつけない*/
+    background-color: #cee8ce;
+}
+
+/*
+クリックより確定したパネルのほうが優先度が高いため
+*/
+.myClick.own {
     background-color: #bff6bf;
 }
 
-.sudokuClick.opponent {
+.myClick.opponent {
     background-color: #f5d1fb;
 }
 

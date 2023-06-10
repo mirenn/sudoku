@@ -514,6 +514,19 @@ async function main() {
             }, 1000);
         });
 
+        //ホバー
+        socket.on('hover', function (data: { id: string }) {
+            const rooms = Array.from(socket.rooms);
+            let roomId = '';
+            rooms.forEach(rm => {
+                if (rm !== socket.id) {
+                    roomId = rm;
+                }
+            });
+            //相手にだけ送るbroadcast
+            socket.broadcast.to(roomId).emit('hoverServer', data);
+        });
+
         //クライアントから受けた数独提出答え受け取り用
         socket.on('submitSimpleMode', function (submitInfo) {
             console.log('submitInfo: ', submitInfo);

@@ -347,7 +347,7 @@ socketio.on("turnCount", (data) => {
     let who;
     if (data.turnUserId === pubUserId | data.turnUserId === subUserId) {
         who = '自分のターン';
-    } else if (data.turnUserId === 'auto' && data.countdown < 4 ) {
+    } else if (data.turnUserId === 'auto' && data.countdown < 4) {
         who = 'オート';
         return;
     } else {
@@ -356,6 +356,16 @@ socketio.on("turnCount", (data) => {
     let dispmessage = who + '残り秒数' + data.countdown;
     document.getElementById('disp2').textContent = dispmessage;
     turnCntId = data;
+});
+
+socketio.on("hoverServer", function (data) {
+    const elements = document.querySelectorAll('.opohover');
+    elements.forEach(element => {
+        element.classList.remove('opohover');
+    });
+    if(data.id !== ''){
+        document.getElementById(data.id).classList.add('opohover');
+    }
 });
 
 //接続エラー時のイベント
@@ -370,13 +380,21 @@ let place;
 // 空の数独魔法陣作成など
 function render_empty_board() {
     console.log('renderemptyboard');
-    let targets = document.getElementsByClassName("clickenable");
-    for (let i = 0; i < targets.length; i++) {
-        targets[i].addEventListener("click", (e) => {
+
+    const tds = document.querySelectorAll('#sudoku tr td');
+    tds.forEach(td => {
+        td.addEventListener('mouseover', (e) => {
+            socketio.emit("hover", { id: e.target.id });
+        });
+        td.addEventListener("click", (e) => {
             console.log("nagai click", e.target.textContent);
             sudokuClick(e);
         }, false);
-    }
+    });
+    document.querySelector('#sudoku').addEventListener('mouseleave', function() {
+        // do something
+        socketio.emit('hover', {id : ''});
+    });
 
     for (let i = 1; i < 10; i++) {
         let td = document.getElementById(String(i));
@@ -397,25 +415,25 @@ function goGameButtonClick(e) {
     }
     document.getElementById('waiting_disp').classList.remove('d-none');
     document.getElementById('name_button').classList.add('d-none');
-    if(gameMode === 'SimpleMode'){
-        socketio.emit("gogameSimpleMode", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value});
-    }else if(gameMode === 'TurnMode'){
-        socketio.emit("gogameTurnMode", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value});
+    if (gameMode === 'SimpleMode') {
+        socketio.emit("gogameSimpleMode", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value });
+    } else if (gameMode === 'TurnMode') {
+        socketio.emit("gogameTurnMode", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value });
     }
 }
 
 // 問題パネルのマスが押された時の処理
-// sudokuClickクラスを一か所につける
+// myClickクラスを一か所につける
 //ただし、つけているところをクリックしたら消せる
 function sudokuClick(e) {
     let onazi = false;
-    if (e.target.classList.contains('sudokuClick')) {
+    if (e.target.classList.contains('myClick')) {
         //前回押したところが今回押したところと同じならば(今回押したところをすでにクリックしていたなら)
         onazi = true;
     }
 
-    if (place != undefined) {//前のsudokuClickクラスを消す
-        place.classList.remove('sudokuClick');
+    if (place != undefined) {//前のmyClickクラスを消す
+        place.classList.remove('myClick');
     }
 
     if (onazi) {
@@ -424,7 +442,7 @@ function sudokuClick(e) {
     }
 
     place = e.target;
-    place.classList.add('sudokuClick');
+    place.classList.add('myClick');
     socketio.emit("myselect", e.target.id);
 }
 
@@ -432,12 +450,12 @@ function sudokuClick(e) {
 function selectClick(e) {
     console.log('nagai select click');
     if (singlePlayFlag) {
-        if (document.getElementsByClassName("sudokuClick")[0] === undefined || document.getElementsByClassName("sudokuClick")[0].textContent != "-") { return; }
+        if (document.getElementsByClassName("myClick")[0] === undefined || document.getElementsByClassName("myClick")[0].textContent != "-") { return; }
         let datas = document.getElementById("sudoku").querySelectorAll("tr");
         //本当は二重ループ回す必要ない
         outer_loop: for (let i = 0; i < datas.length; i++) {
             for (let j = 0; j < datas[i].querySelectorAll("td").length; j++) {
-                if (datas[i].querySelectorAll("td")[j].classList.contains("sudokuClick")) {
+                if (datas[i].querySelectorAll("td")[j].classList.contains("myClick")) {
                     const id = String(i) + String(j);
                     if (e.target.textContent === singlePlayState['answer'][i * 9 + j]) {
                         //正解の場合
@@ -471,12 +489,12 @@ function selectClick(e) {
         }
     } else if (gameMode === 'TurnMode') {
         if (startCountDown > 0) return;//カウントダウン中に押してもすぐ終了
-        if (document.getElementsByClassName("sudokuClick")[0] === undefined || document.getElementsByClassName("sudokuClick")[0].textContent != "-") { return; }
+        if (document.getElementsByClassName("myClick")[0] === undefined || document.getElementsByClassName("myClick")[0].textContent != "-") { return; }
 
-        if (document.getElementsByClassName('sudokuClick').length > 0) {
+        if (document.getElementsByClassName('myClick').length > 0) {
             let submitInfo = {
                 roomId: roomId,
-                coordinate: document.getElementsByClassName('sudokuClick')[0].id,
+                coordinate: document.getElementsByClassName('myClick')[0].id,
                 val: e.target.textContent
             };
             console.log('nagai submitInfo', submitInfo);
@@ -486,12 +504,12 @@ function selectClick(e) {
     else {
         //SinmpleMode
         if (startCountDown > 0) return;//カウントダウン中に押してもすぐ終了
-        if (document.getElementsByClassName("sudokuClick")[0] === undefined || document.getElementsByClassName("sudokuClick")[0].textContent != "-") { return; }
+        if (document.getElementsByClassName("myClick")[0] === undefined || document.getElementsByClassName("myClick")[0].textContent != "-") { return; }
         let datas = document.getElementById("sudoku").querySelectorAll("tr");
         //for文回さなくても選択しているマスはclassで分かるのでそのうち書き換える……
         outer_loop: for (let i = 0; i < datas.length; i++) {
             for (let j = 0; j < datas[i].querySelectorAll("td").length; j++) {
-                if (datas[i].querySelectorAll("td")[j].classList.contains("sudokuClick")) {
+                if (datas[i].querySelectorAll("td")[j].classList.contains("myClick")) {
                     let cd = String(i) + String(j);
                     //送信処理//答え送信
                     let submitInfo = { roomId: roomId, coordinate: cd, val: e.target.textContent };
