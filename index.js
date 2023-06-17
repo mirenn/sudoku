@@ -16,6 +16,7 @@ const astxt = answertext.toString();
 const answerlines = astxt.split('\n');
 const problemtext = fs_1.default.readFileSync("./problem.txt", 'utf8');
 const problemlines = problemtext.toString().split('\n');
+const INFINITROOM = 'InfiniteRoom';
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
@@ -27,6 +28,7 @@ const gameInfos = {};
  */
 const lock = new async_lock_1.default();
 async function main() {
+    gameInfos[INFINITROOM] = generateStartGameInfoInfiniteMode();
     //AzureDB接続
     // Provide required connection from environment variables
     const key = String(process.env.COSMOS_KEY);
@@ -79,8 +81,10 @@ async function main() {
     io.on('connection', function (socket) {
         const count = io.engine.clientsCount;
         io.emit('connectnum', count);
-        //リセット。もしだれもいない部屋の盤面があれば消しておく
+        //リセット。もしだれもいない部屋の盤面があれば消しておく//ただしInfiniteRoomを除く
         Object.keys(gameInfos).forEach(rmkey => {
+            if (rmkey === INFINITROOM)
+                return;
             const rmclients = io.sockets.adapter.rooms.get(rmkey);
             const rmNumClients = rmclients ? rmclients.size : 0;
             if (rmNumClients === 0) {
@@ -437,8 +441,66 @@ async function main() {
                 });
             }, 1000);
         });
+        //待機ルームに入る用
+        socket.on('gogameInfiniteMode', function (data) {
+            socket.data.userId = data['userId'];
+            socket.data.subUserId = data['subUserId'];
+            socket.data.pubUserId = data['pubUserId'];
+            socket.data.matchUserId = data['pubUserId'];
+            console.log('gogame', data);
+            if (!(socket.data.pubUserId in usersCosmos)) {
+                usersCosmos[socket.data.pubUserId] = {
+                    "pk": "A",
+                    "id": socket.data.pubUserId,
+                    "userId": socket.data.userId,
+                    "name": data['name'].slice(0, 24),
+                    "rate": 1500
+                };
+            }
+            else if (socket.data.userId === usersCosmos[socket.data.pubUserId]['userId']) {
+                //名前だけ更新
+                usersCosmos[socket.data.pubUserId]['name'] = data['name'].slice(0, 24);
+            }
+            else if (socket.data.pubUserId === 'auto') {
+                //autoという文字列も入れられると困るので……
+                console.log('不正検知:', socket.data.pubUserId, socket.data.userId);
+                return;
+            }
+            else {
+                console.log('不正検知:', socket.data.pubUserId, socket.data.userId);
+                return;
+            }
+            //試合後などに再戦する場合、
+            //もともと入っていた部屋全てから抜ける
+            const rooms = Array.from(socket.rooms);
+            rooms.forEach(rm => {
+                if (rm !== socket.id) {
+                    socket.leave(rm);
+                }
+            });
+            socket.emit('match', INFINITROOM);
+            const rclients = io.sockets.adapter.rooms.get(INFINITROOM);
+            //同一ブラウザ同士の対決、もしく同一のpubUserId同士（不正に設定）の場合
+            rclients?.forEach(cl => {
+                const sk = io.sockets.sockets.get(cl);
+                if (sk?.data.matchUserId && socket.data.pubUserId === sk?.data.matchUserId) {
+                    socket.data.matchUserId = socket.data.subUserId;
+                }
+            });
+            socket.join(INFINITROOM);
+            gameInfos[INFINITROOM]['points'][socket.data.matchUserId] = 0; //参加時0ポイントで参加
+            console.log('ルーム: InfiniteRoomに入っている人のIDのSet', rclients);
+            console.log('待機ルームの人のIDのSet', rclients);
+            console.log('InfiniteModeゲーム開始');
+            //正常に部屋が立ったなら
+            //ゲームに必要な情報を作成する
+            //盤面の正解の情報,現在の盤面の状態
+            io.to(INFINITROOM).emit("state", { board: gameInfos[INFINITROOM]['board'], points: gameInfos[INFINITROOM]['points'] });
+        });
         //ホバー
         socket.on('hover', function (data) {
+            const returnData = data;
+            returnData['matchUserId'] = socket.data.matchUserId;
             const rooms = Array.from(socket.rooms);
             let roomId = '';
             rooms.forEach(rm => {
@@ -455,9 +517,14 @@ async function main() {
             check(submitInfo, socket);
         });
         //クライアントから受けた数独提出答え受け取り用
-        socket.on('submitTurnModeAnswer', function (submitInfo) {
+        socket.on('submitTurnMode', function (submitInfo) {
             console.log('submitInfo: ', submitInfo);
             checkTurnModeAnswer(submitInfo, socket);
+        });
+        //クライアントから受けた数独提出答え受け取り用
+        socket.on('submitInfiniteMode', function (submitInfo) {
+            console.log('submitInfo: ', submitInfo);
+            checkInfiniteMode(submitInfo, socket);
         });
         socket.on('myselect', function (data) {
             //自分が選択しているところの座標を相手にだけ送る
@@ -521,7 +588,6 @@ async function main() {
             board: board,
             answer: answer, points: { [data0.matchUserId]: 0, [data1.matchUserId]: 0 },
             logs: [], startCountDown: 6,
-            idTable: { [data0.userId]: data0.matchUserId, [data1.userId]: data1.matchUserId },
             idTableMatchPub: { [data0.matchUserId]: data0.pubUserId, [data1.matchUserId]: data1.pubUserId },
             mode: mode
         };
@@ -534,6 +600,42 @@ async function main() {
             rtobj['turnIndex'] = 0;
             rtobj['countdown'] = 15;
         }
+        return rtobj;
+    }
+    /**
+     * 新しく作られた部屋のゲーム情報を生成する
+     * @param data0 socketのdata
+     * @param data1
+     * @param
+     * @returns
+     */
+    function generateStartGameInfoInfiniteMode() {
+        const problemnum = getRandomInt(500);
+        const startboard = problemlines[problemnum];
+        const answer = answerlines[problemnum];
+        const asarray = answer.match(/.{9}/g);
+        const askaigyo = asarray?.join('\n');
+        console.log(askaigyo); //デバッグで自分で入力するとき用に魔法陣の答え出力
+        const board = {};
+        // 通常のfor文で行う
+        for (let i = 0; i < 81; i++) {
+            const syou = Math.floor(i / 9);
+            const mod = i % 9;
+            const coord = String(syou) + String(mod);
+            const inval = startboard[i];
+            let inid = 'auto';
+            if (inval === '-') {
+                inid = 'mada';
+            }
+            board[coord] = { id: inid, val: inval };
+        }
+        const rtobj = {
+            board: board,
+            answer: answer, points: {},
+            logs: [], startCountDown: 6,
+            idTableMatchPub: {},
+            mode: 'InfiniteMode'
+        };
         return rtobj;
     }
     /**
@@ -603,6 +705,62 @@ async function main() {
                     }
                     delete gameInfos[rmid];
                 })();
+            }
+        });
+    }
+    /**
+     * 提出された回答を判定して、二人のユーザーに結果送信
+     * @param submitInfo
+     * @param socket
+     */
+    function checkInfiniteMode(submitInfo, socket) {
+        const rmid = INFINITROOM;
+        lock.acquire(rmid, function () {
+            const cod = submitInfo['coordinate'];
+            const val = submitInfo['val'];
+            const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
+            const matchUserId = socket.data.matchUserId;
+            let eventData;
+            if (gameInfos[rmid]['answer'][indx] === val && gameInfos[rmid]['board'][cod]['val'] === '-') { //まだ値が入っていないものに対して
+                //正解の場合
+                console.log('正解');
+                gameInfos[rmid]['board'][cod]['val'] = val;
+                gameInfos[rmid]['board'][cod]['id'] = matchUserId;
+                gameInfos[rmid]['points'][matchUserId] += parseInt(val);
+                eventData = { status: 'correct', matchUserId: matchUserId, val: val, coordinate: cod };
+                gameInfos[rmid]['logs'].push(eventData);
+            }
+            else if (gameInfos[rmid]['board'][cod]['val'] === '-') {
+                console.log('不正解');
+                //不正解の場合減点
+                gameInfos[rmid]['points'][matchUserId] -= parseInt(val);
+                eventData = { status: 'incorrect', matchUserId: matchUserId, val: val, coordinate: cod };
+                gameInfos[rmid]['logs'].push(eventData);
+            }
+            io.to(rmid).emit('event', eventData);
+            io.to(rmid).emit("state", { board: gameInfos[rmid]['board'], points: gameInfos[rmid]['points'] });
+            // 終了検知
+            let endgame = true;
+            Object.keys(gameInfos[rmid]['board']).forEach(key => {
+                if (gameInfos[rmid]['board'][key]['val'] === '-') {
+                    endgame = false;
+                }
+            });
+            if (endgame === true) {
+                console.log('ルーム:', rmid, 'のゲーム終了');
+                setTimeout(() => {
+                    gameInfos[rmid] = generateStartGameInfoInfiniteMode();
+                    const rclients = io.sockets.adapter.rooms.get(INFINITROOM);
+                    lock.acquire(rmid, () => {
+                        rclients?.forEach(cl => {
+                            const sk = io.sockets.sockets.get(cl);
+                            if (sk?.data.matchUserId) {
+                                gameInfos[rmid]['points'][sk.data.matchUserId] = 0;
+                            }
+                        });
+                        io.to(rmid).emit('stateInfiniteMode');
+                    });
+                }, 5000);
             }
         });
     }
