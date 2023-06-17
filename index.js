@@ -50,7 +50,7 @@ async function main() {
     });
     console.log(`${container.id} container ready`);
     const querySpec = {
-        query: "select u.pk,u.id,u.userId,u.rate,u.name from users u"
+        query: "select u.pk,u.id,u.passWord,u.rate,u.name from users u"
     };
     let usersCosmos;
     // Get items 
@@ -59,7 +59,7 @@ async function main() {
         //ランキング情報全て取得しておいてメモリに持った情報を参照する。更新は都度更新しにいく
         const { resources } = await container.items.query(querySpec).fetchAll();
         console.log('cosmosDB Data:', resources);
-        //配列のままだと使いにくいので、id(userId)をキーにしたオブジェクトに
+        //配列のままだと使いにくいので、id(matchUserId)をキーにしたオブジェクトに
         usersCosmos = resources.reduce((acc, item) => {
             acc[item['id']] = item;
             return acc;
@@ -128,7 +128,7 @@ async function main() {
         //待機ルームに入る用
         socket.on('gogameSimpleMode', function (data) {
             let roomId = data['roomId'];
-            socket.data.userId = data['userId'];
+            socket.data.passWord = data['passWord'];
             socket.data.subUserId = data['subUserId'];
             socket.data.pubUserId = data['pubUserId'];
             socket.data.matchUserId = data['pubUserId'];
@@ -137,24 +137,24 @@ async function main() {
                 usersCosmos[socket.data.pubUserId] = {
                     "pk": "A",
                     "id": socket.data.pubUserId,
-                    "userId": socket.data.userId,
+                    "passWord": socket.data.passWord,
                     "name": data['name'].slice(0, 24),
                     "rate": 1500
                 };
             }
-            else if (socket.data.userId === usersCosmos[socket.data.pubUserId]['userId']) {
+            else if (socket.data.passWord === usersCosmos[socket.data.pubUserId]['passWord']) {
                 //名前だけ更新
                 usersCosmos[socket.data.pubUserId]['name'] = data['name'].slice(0, 24);
             }
             else if (socket.data.pubUserId === 'auto') {
                 //autoという文字列も入れられると困るので……
-                console.log('不正検知:', socket.data.pubUserId, socket.data.userId);
+                console.log('不正検知:', socket.data.pubUserId, socket.data.passWord);
                 return;
             }
             else {
                 //nagai pubUserIdは既に入っているのと同じものを持っているのに
-                //userIdが一致しない場合……、それは他の人のpubUserIdに不正なパスワードで入るのと同じ
-                console.log('不正検知:', socket.data.pubUserId, socket.data.userId);
+                //passWordが一致しない場合……、それは他の人のpubUserIdに不正なパスワードで入るのと同じ
+                console.log('不正検知:', socket.data.pubUserId, socket.data.passWord);
                 return;
             }
             //試合後などに再戦する場合、
@@ -225,7 +225,7 @@ async function main() {
                 //正常に部屋が立ったなら
                 //ゲームに必要な情報を作成する
                 //盤面の正解の情報,現在の盤面の状態
-                gameInfos[roomId] = generateStartGameInfo(cl0.data, cl1.data, data['mode']);
+                gameInfos[roomId] = generateStartGameInfo(cl0.data, cl1.data, 'SimpleMode');
                 io.to(roomId).emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
                 const intervalid = setInterval(function () {
                     gameInfos[roomId]['startCountDown'] -= 1;
@@ -239,7 +239,7 @@ async function main() {
         //待機ルームに入る用
         socket.on('gogameTurnMode', function (data) {
             let roomId = data['roomId'];
-            socket.data.userId = data['userId'];
+            socket.data.passWord = data['passWord'];
             socket.data.subUserId = data['subUserId'];
             socket.data.pubUserId = data['pubUserId'];
             socket.data.matchUserId = data['pubUserId'];
@@ -248,24 +248,24 @@ async function main() {
                 usersCosmos[socket.data.pubUserId] = {
                     "pk": "A",
                     "id": socket.data.pubUserId,
-                    "userId": socket.data.userId,
+                    "passWord": socket.data.passWord,
                     "name": data['name'].slice(0, 24),
                     "rate": 1500
                 };
             }
-            else if (socket.data.userId === usersCosmos[socket.data.pubUserId]['userId']) {
+            else if (socket.data.passWord === usersCosmos[socket.data.pubUserId]['passWord']) {
                 //名前だけ更新
                 usersCosmos[socket.data.pubUserId]['name'] = data['name'].slice(0, 24);
             }
             else if (socket.data.pubUserId === 'auto') {
                 //autoという文字列も入れられると困るので……
-                console.log('不正検知:', socket.data.pubUserId, socket.data.userId);
+                console.log('不正検知:', socket.data.pubUserId, socket.data.passWord);
                 return;
             }
             else {
                 //nagai pubUserIdは既に入っているのと同じものを持っているのに
-                //userIdが一致しない場合……、それは他の人のpubUserIdに不正なパスワードで入るのと同じ
-                console.log('不正検知:', socket.data.pubUserId, socket.data.userId);
+                //passWordが一致しない場合……、それは他の人のpubUserIdに不正なパスワードで入るのと同じ
+                console.log('不正検知:', socket.data.pubUserId, socket.data.passWord);
                 return;
             }
             //試合後などに再戦する場合、
@@ -337,13 +337,14 @@ async function main() {
             //正常に部屋が立ったなら
             //ゲームに必要な情報を作成する
             //盤面の正解の情報,現在の盤面の状態
-            gameInfos[roomId] = generateStartGameInfo(cl0.data, cl1.data, data['mode']);
+            gameInfos[roomId] = generateStartGameInfo(cl0.data, cl1.data, 'TurnMode');
             io.to(roomId).emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
             let iterCnt = 0;
             //処理が長引く場合は１秒以上かかる。setIntervalは最悪処理が並行で走るのでsetTimeoutに
             setTimeout(function gameCountDownFunction() {
                 lock.acquire(roomId, function (done) {
                     if (gameInfos[roomId]['turnModeGameEnd']) {
+                        console.log('turnModeGameEnd delete');
                         delete gameInfos[roomId];
                         done(undefined, true);
                         return;
@@ -386,7 +387,7 @@ async function main() {
                             }
                         }
                         else {
-                            gameInfos[roomId]['countdown'] = 5;
+                            gameInfos[roomId]['countdown'] = 10;
                         }
                     }
                     io.to(roomId).emit("turnCount", { countdown: gameInfos[roomId]['countdown'], turnUserId: gameInfos[roomId]['turnArray'][gameInfos[roomId]['turnIndex']] });
@@ -443,7 +444,7 @@ async function main() {
         });
         //待機ルームに入る用
         socket.on('gogameInfiniteMode', function (data) {
-            socket.data.userId = data['userId'];
+            socket.data.passWord = data['passWord'];
             socket.data.subUserId = data['subUserId'];
             socket.data.pubUserId = data['pubUserId'];
             socket.data.matchUserId = data['pubUserId'];
@@ -452,22 +453,22 @@ async function main() {
                 usersCosmos[socket.data.pubUserId] = {
                     "pk": "A",
                     "id": socket.data.pubUserId,
-                    "userId": socket.data.userId,
+                    "passWord": socket.data.passWord,
                     "name": data['name'].slice(0, 24),
                     "rate": 1500
                 };
             }
-            else if (socket.data.userId === usersCosmos[socket.data.pubUserId]['userId']) {
+            else if (socket.data.passWord === usersCosmos[socket.data.pubUserId]['passWord']) {
                 //名前だけ更新
                 usersCosmos[socket.data.pubUserId]['name'] = data['name'].slice(0, 24);
             }
             else if (socket.data.pubUserId === 'auto') {
                 //autoという文字列も入れられると困るので……
-                console.log('不正検知:', socket.data.pubUserId, socket.data.userId);
+                console.log('不正検知:', socket.data.pubUserId, socket.data.passWord);
                 return;
             }
             else {
-                console.log('不正検知:', socket.data.pubUserId, socket.data.userId);
+                console.log('不正検知:', socket.data.pubUserId, socket.data.passWord);
                 return;
             }
             //試合後などに再戦する場合、
@@ -598,7 +599,7 @@ async function main() {
             data.push('auto');
             rtobj['turnArray'] = data;
             rtobj['turnIndex'] = 0;
-            rtobj['countdown'] = 15;
+            rtobj['countdown'] = 10;
         }
         return rtobj;
     }
@@ -703,6 +704,7 @@ async function main() {
                     catch (error) {
                         console.error(error);
                     }
+                    console.log('ゲーム終了 delete');
                     delete gameInfos[rmid];
                 })();
             }
