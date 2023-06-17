@@ -2,15 +2,18 @@
 * 他人にばれてはいけないユーザーID
 * pubUserIDのログインパスワードのようなもの
 */
-let userId = localStorage.getItem('userId');
-if (!userId) {
-    userId = self.crypto.randomUUID();
-    localStorage.setItem('userId', userId);
+let passWord = localStorage.getItem('userId');
+if (!passWord) {
+    passWord = self.crypto.randomUUID();
+    localStorage.setItem('userId', passWord);
+    localStorage.setItem('passWord', passWord);//移行中。userIdではなくこちらで置き換える予定。userIdはいらない
+}else{
+    localStorage.setItem('passWord', passWord);//移行中
 }
 /**
  * 公開用ユーザーID
  * サーバーから返却される盤面情報のユーザー識別子/ランキングのユーザー識別子に使用。
- * ゲーム開始時最初にuserIdとpubUserIdを提出、
+ * ゲーム開始時最初にpassWordとpubUserIdを提出、
  * 返却される情報はpubUserIdを用いたものになる。
  */
 let pubUserId = localStorage.getItem('pubUserId');
@@ -18,7 +21,7 @@ if (!pubUserId) {
     pubUserId = self.crypto.randomUUID();
     localStorage.setItem('pubUserId', pubUserId);
 }
-/**自分で同ブラウザ同士対戦用 userId,pubUserIdの代わりに使用される? */
+/**自分で同ブラウザ同士対戦用 pubUserIdの代わりに使用される */
 const subUserId = self.crypto.randomUUID();
 
 //部屋ID //途中で切断しても戻れるように
@@ -448,11 +451,11 @@ function goGameButtonClick(e) {
     document.getElementById('waiting_disp').classList.remove('d-none');
     document.getElementById('name_button').classList.add('d-none');
     if (gameMode === 'SimpleMode') {
-        socketio.emit("gogameSimpleMode", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value });
+        socketio.emit("gogameSimpleMode", { roomId: roomId, passWord: passWord, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value });
     } else if (gameMode === 'TurnMode') {
-        socketio.emit("gogameTurnMode", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value });
+        socketio.emit("gogameTurnMode", { roomId: roomId, passWord: passWord, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value });
     } else if (gameMode === 'InfiniteMode') {
-        socketio.emit("gogameInfiniteMode", { roomId: roomId, userId: userId, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value });
+        socketio.emit("gogameInfiniteMode", { roomId: roomId, passWord: passWord, subUserId: subUserId, pubUserId: pubUserId, name: document.getElementById('nick').value });
     }
 }
 
