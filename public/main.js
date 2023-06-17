@@ -206,7 +206,7 @@ socketio.on('match', function (rid) {
 socketio.on('startCountDown', function (num) {
     startCountDown = num;
     $('#disp2').text('マッチしました。あと' + String(num) + '秒で開始します。');
-    if (num < 1) {
+    if (num < 1 && gameMode !== 'TurnMode') {
         $('#disp2').text('Start');
         const elements = document.getElementsByClassName('numbutton');
         for (let i = 0; i < elements.length; i++) {
@@ -352,6 +352,7 @@ socketio.on('stateInfiniteMode', function (data) {
 //TurnMode用。ゲーム進行カウントダウン
 //nagai:ゲーム終了してもカウント進んでいたので修正する
 socketio.on("turnCount", (data) => {
+    console.log('nagai data', data);
     if (data.turnUserId === pubUserId | data.turnUserId === subUserId) {
         const elements = document.getElementsByClassName('numbutton');
         for (var i = 0; i < elements.length; i++) {
@@ -370,9 +371,8 @@ socketio.on("turnCount", (data) => {
     let who;
     if (data.turnUserId === pubUserId | data.turnUserId === subUserId) {
         who = '自分のターン';
-    } else if (data.turnUserId === 'auto' && data.countdown < 4) {
+    } else if (data.turnUserId === 'auto') {
         who = 'オート';
-        return;
     } else {
         who = '相手のターン'
     }

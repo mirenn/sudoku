@@ -296,7 +296,7 @@ async function main() {
                 //正常に部屋が立ったなら
                 //ゲームに必要な情報を作成する
                 //盤面の正解の情報,現在の盤面の状態
-                gameInfos[roomId] = generateStartGameInfo(cl0.data as socketData, cl1.data as socketData, data['mode']);
+                gameInfos[roomId] = generateStartGameInfo(cl0.data as socketData, cl1.data as socketData, 'SimpleMode');
                 io.to(roomId).emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
                 const intervalid = setInterval(function () {
                     gameInfos[roomId]['startCountDown'] -= 1;
@@ -413,7 +413,7 @@ async function main() {
             //正常に部屋が立ったなら
             //ゲームに必要な情報を作成する
             //盤面の正解の情報,現在の盤面の状態
-            gameInfos[roomId] = generateStartGameInfo(cl0.data as socketData, cl1.data as socketData, data['mode']);
+            gameInfos[roomId] = generateStartGameInfo(cl0.data as socketData, cl1.data as socketData, 'TurnMode');
             io.to(roomId).emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
 
             let iterCnt = 0;
@@ -421,6 +421,7 @@ async function main() {
             setTimeout(function gameCountDownFunction() {
                 lock.acquire(roomId, function (done) {
                     if (gameInfos[roomId]['turnModeGameEnd']) {
+                        console.log('turnModeGameEnd delete');
                         delete gameInfos[roomId];
                         done(undefined, true);
                         return;
@@ -460,7 +461,7 @@ async function main() {
                                 io.to(roomId).emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
                             }
                         } else {
-                            gameInfos[roomId]['countdown'] = 5;
+                            gameInfos[roomId]['countdown'] = 10;
                         }
                     }
                     io.to(roomId).emit("turnCount", { countdown: gameInfos[roomId]['countdown'], turnUserId: gameInfos[roomId]['turnArray'][gameInfos[roomId]['turnIndex']] });
@@ -681,7 +682,7 @@ async function main() {
             data.push('auto');
             rtobj['turnArray'] = data;
             rtobj['turnIndex'] = 0;
-            rtobj['countdown'] = 15;
+            rtobj['countdown'] = 10;
         }
         return rtobj;
     }
@@ -788,6 +789,7 @@ async function main() {
                     } catch (error) {
                         console.error(error);
                     }
+                    console.log('ゲーム終了 delete');
                     delete gameInfos[rmid];
                 })();
             }
