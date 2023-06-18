@@ -56,7 +56,6 @@ interface gogamedata {
     pubUserId: string,
     subUserId: string,//同じブラウザ同士の対戦用のid
     name: string,
-    mode: mode
 }
 /**
  * cosmosDBからとってきてメモリに保持する情報
