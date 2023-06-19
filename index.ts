@@ -85,7 +85,7 @@ const PORT = process.env.PORT || 3000;
 const gameInfos: roomDictionaryArray = {};
 
 /**
- * 非同期処理
+ * 排他処理用。同時に処理が走ると困るものについて使用。答え提出処理など
  */
 const lock = new AsyncLock();
 
