@@ -10,9 +10,9 @@ import AsyncLock from 'async-lock';
  * 現在の数独魔法陣盤面情報（見えている盤面）
  */
 interface board {
-    [coordinate: string]: {//座標
+    [coordinate: string]: {//座標。01~88まで。
         id: string,//当てた人のid 自動:auto,まだ:mada,プレイヤー:matchUserId
-        val: string,//見えている値。数字、まだ決まっていない値は-で表現
+        val: string,//見えている値。数字の文字、まだ決まっていない値は-で表現
     }
 }
 /**
@@ -33,17 +33,21 @@ interface gameInfo {
     idTableMatchPub: { [matchUserId: string]: string },//matchUserIdとpubUserIdの対応。endgame時に使用
     mode: mode,
     //以下turnmode時のみ存在。tsのエラーがめんどいのでany型に
-    turnArray?: any,//string[],//各ターンを司るidなどが入る。matchuserid0,'standby0',matchuserid1,'standby1'
-    turnIndex?: any,//number,//TurnMode時のみ存在するプロパティ。どのターンかturnArrayのindex
-    submitFlag?: any,//boolean 提出されたときtrueになる
-    turnModeGameEnd?: any,//boolean ゲーム終了時、もしくは誰も部屋にいないときtrueになる
-    countdown?: any//numberゲームを管理するカウントダウン
+    /** string[] ターンの順番、matchUserIdが入る。matchUserId0,'auto',matchUserId1,'auto'*/
+    turnArray?: any,
+    /** //number 誰のターンかを意味する、turnArrayのindex*/
+    turnIndex?: any,
+    /** boolean 回答提出されたときtrueになる、回答提出されていたなら次のautoでは盤面はめくられない。falseならめくる*/
+    submitFlag?: any,
+    /** boolean ゲーム終了時、もしくは誰も部屋にいないときtrueになり、trueならsetTimeout内の定期実行処理内で盤面情報削除処理実行*/
+    turnModeGameEnd?: any,
+    /**numberゲームを管理するカウントダウン */
+    countdown?: any
 }
 /**
- * 部屋
+ * 部屋のIDがキーで、各部屋の情報を格納
  */
 interface roomDictionaryArray {
-    // (文字型のキー):  string
     [rooms: string]: gameInfo
 }
 type mode = 'SimpleMode' | 'TurnMode' | 'InfiniteMode';
