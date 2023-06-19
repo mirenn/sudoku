@@ -41,7 +41,7 @@ interface gameInfo {
     submitFlag?: any,
     /** boolean ゲーム終了時、もしくは誰も部屋にいないときtrueになり、trueならsetTimeout内の定期実行処理内で盤面情報削除処理実行*/
     turnModeGameEnd?: any,
-    /**numberゲームを管理するカウントダウン */
+    /**number ゲームを管理するカウントダウン */
     countdown?: any
 }
 /**
