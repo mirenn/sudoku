@@ -56,6 +56,8 @@ https://learn.microsoft.com/ja-jp/azure/cosmos-db/nosql/tutorial-nodejs-web-app
 
 favicon.ico
 https://icooon-mono.com/11343-%e3%83%aa%e3%82%b9%e3%81%ae%e3%82%a2%e3%82%a4%e3%82%b3%e3%83%b3%e3%81%a7%e3%81%99%e3%81%9f%e3%81%84%e3%80%82/
+↓変更
+https://icons.getbootstrap.jp/icons/grid/
 
 
 ボタンとニックネームに関しては横並びのが良かったので
