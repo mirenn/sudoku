@@ -176,9 +176,10 @@
               <span id="point_2"></span>
             </div>
           </div>
-          <textarea class="form-control" placeholder="log" id="log" readonly></textarea>
+          <textarea class="form-control mb-2" placeholder="log" id="log" readonly></textarea>
           <div id="chat" class="mb-4">
-            <ul id="messages"></ul>
+            <textarea class="form-control" placeholder="chat" id="chatarea" readonly></textarea>
+            <!--ul id="messages"></ul-->
             <form id="message_form" action="#">
               <input id="input_msg" placeholder="message" class="form-control mb-2" autocomplete="off" />
               <button class="btn btn-primary" data-bs-toggle="tooltip" title="send message">Send</button>
@@ -188,20 +189,22 @@
       </div>
     </div>
     <div class="row d-flex justify-content-center">
-    <div class="col-md-6">
-      <div class="form-group">
-        <table id="ranking" class="table table-bordered caption-top table-hover ">
-          <caption>ranking</caption>
-          <thead>
-            <tr>
-              <th scope="col">#</th>
-              <th scope="col">name</th>
-              <th scope="col">rate</th>
-              <th scope="col">rank</th>
-            </tr>
-          </thead>
-        </table>
-    </div></div></div>
+      <div class="col-md-6">
+        <div class="form-group">
+          <table id="ranking" class="table table-bordered caption-top table-hover ">
+            <caption>ranking</caption>
+            <thead>
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">name</th>
+                <th scope="col">rate</th>
+                <th scope="col">rank</th>
+              </tr>
+            </thead>
+          </table>
+        </div>
+      </div>
+    </div>
   </main>
   <script type="text/javascript" src="main.js"></script>
   <script src="./assets/dist/js/bootstrap.bundle.min.js"></script>

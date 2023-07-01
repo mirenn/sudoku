@@ -197,10 +197,8 @@ socketio.on('match', function (rid) {
     document.getElementById('waiting_disp').classList.add('d-none');//対戦待ち接続中
     document.getElementById('waiting_num').classList.add('d-none');//現在の総接続人数
     //チャットクリア
-    const list = document.getElementById("messages");
-    while (list.firstChild) {
-        list.removeChild(list.firstChild);
-    }
+    const charea = document.getElementById("chatarea");
+    charea.value = '';
 });
 //マッチ後のカウントダウン
 socketio.on('startCountDown', function (num) {
@@ -228,7 +226,9 @@ $('#message_form').submit(function () {
 });
 //チャットメッセージ機能用
 socketio.on('message', function (msg) {
-    $('#messages').append($('<li>').text(msg));
+    const charea = document.getElementById('chatarea');
+    charea.value += msg + "\n";
+    charea.scrollTop = charea.scrollHeight;
 });
 //どこを選択しているか表示用
 socketio.on('opponentSelect', function (data) {
