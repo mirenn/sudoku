@@ -58,7 +58,7 @@ let startCountDown = 0;
 let gameMode = '';
 
 //空の数独マスにイベント追加
-render_empty_board();
+renderEmptyBoard();
 
 /**
  * 一人用ゲームフラグ
@@ -69,13 +69,13 @@ let singlePlayState = JSON.parse(localStorage.getItem('singlePlayState'));
 console.log('nagai singleplaystate', singlePlayState);
 if (singlePlayState) {//保存されているものがあるのならそれを使用する
     //盤面終了していないか確認
-    let s_endgame = true;
+    let singleEndGame = true;
     Object.keys(singlePlayState['board']).forEach(key => {
         if (singlePlayState['board'][key]['val'] === '-') {
-            s_endgame = false;
+            singleEndGame = false;
         }
     });
-    if (s_endgame) {
+    if (singleEndGame) {
         socketio.emit('requestsingleplay');
     } else {
         for (let i = 0; i < 9; i++) {
@@ -454,7 +454,7 @@ socketio.on('connect_error', (error) => {
 let place;
 
 // 空の数独魔法陣作成など
-function render_empty_board() {
+function renderEmptyBoard() {
     console.log('renderemptyboard');
 
     const tds = document.querySelectorAll('#sudoku tr td');
@@ -557,13 +557,13 @@ function selectClick(e) {
                 }
             }
         }
-        let s_endgame = true;
+        let singleEndGame = true;
         Object.keys(singlePlayState['board']).forEach(key => {
             if (singlePlayState['board'][key]['val'] === '-') {
-                s_endgame = false;
+                singleEndGame = false;
             }
         });
-        if (s_endgame) {
+        if (singleEndGame) {
             socketio.emit('requestsingleplay');
         }
     } else if (gameMode === 'TurnMode') {
