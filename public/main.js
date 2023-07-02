@@ -7,7 +7,7 @@ if (!passWord) {
     passWord = self.crypto.randomUUID();
     localStorage.setItem('userId', passWord);
     localStorage.setItem('passWord', passWord);//移行中。userIdではなくこちらで置き換える予定。userIdはいらない
-}else{
+} else {
     localStorage.setItem('passWord', passWord);//移行中
 }
 /**
@@ -199,6 +199,8 @@ socketio.on('match', function (rid) {
     //チャットクリア
     const charea = document.getElementById("chatarea");
     charea.value = '';
+    //HighOrLow初期値リセット（本当はサーバーから取ってきた値を入れるのだが面倒なので）
+    document.querySelector('#highLowButton .badge').textContent = '4';
 });
 //マッチ後のカウントダウン
 socketio.on('startCountDown', function (num) {
@@ -211,13 +213,13 @@ socketio.on('startCountDown', function (num) {
             elements[i].classList.remove("glayout");
         }
     } else {
+        //TurnModeではカウントダウン中ずっとグレイアウト
         const elements = document.getElementsByClassName('numbutton');
         for (let i = 0; i < elements.length; i++) {
             elements[i].classList.add("glayout");
         }
     }
 });
-
 //チャット送信
 $('#message_form').submit(function () {
     socketio.emit('message', $('#input_msg').val());
@@ -230,6 +232,31 @@ socketio.on('message', function (msg) {
     charea.value += msg + "\n";
     charea.scrollTop = charea.scrollHeight;
 });
+
+document.getElementById("highLowButton").addEventListener("click", function (e) {
+    if (startCountDown > 0) return;//カウントダウン中に押しても棄却
+    if (document.getElementsByClassName("myClick")[0] === undefined || document.getElementsByClassName("myClick")[0].textContent !== "-") { return; }
+    if (parseInt(document.querySelector('#highLowButton .badge').textContent) < 1) { return; }
+    if (document.getElementsByClassName('myClick').length > 0) {
+        let submitExtInfo = {
+            roomId: roomId,
+            extType: 'HIGHORLOW',
+            coordinate: document.getElementsByClassName('myClick')[0].id,
+        };
+        console.log('nagai submitExtInfo', submitExtInfo);
+        socketio.emit('submitExt', submitExtInfo);
+    }
+});
+//その他(今はHighOrLowのみ)
+socketio.on('ext', function (data) {
+    //const returnData = { status: 'CheckHighOrLow' as Status, matchUserId: matchUserId, coordinate: cod, highOrLow: highOrLow, remainingHighOrLowCount: gameInfos[rmid].users[matchUserId].remainingHighOrLowCount };
+    console.log('nagai 確認', data);
+    document.querySelector('#highLowButton .badge').textContent = data['remainingHighOrLowCount'];
+    if (document.getElementById(data['coordinate']).textContent === '-') {
+        document.getElementById(data['coordinate']).textContent = data['highOrLow'];
+    }
+});
+
 //どこを選択しているか表示用
 socketio.on('opponentSelect', function (data) {
     console.log('nagai opponentSelect', data);
@@ -246,7 +273,7 @@ socketio.on('opponentSelect', function (data) {
  * {status: string,matchUserId: string,val: string,coordinate: string}
  */
 socketio.on('event', function (eventData) {
-    if (eventData.status === 'incorrect') {
+    if (eventData.status === 'InCorrect') {
         //自分が不正解だった場合&& (eventData.matchUserId === pubUserId || eventData.matchUserId === subUserId)
         // const image = document.getElementById("closeicon");
         // image.style.display = "block";
@@ -276,24 +303,34 @@ socketio.on('event', function (eventData) {
         return;//autoなら処理ここまで
     }
 
-    //今は文字を画面に表示しているだけなので文字列で送ってくるだけで良い……。
-    const who = (eventData.matchUserId === pubUserId || eventData.matchUserId === subUserId) ? '自分' : '相手';
-    const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
-    const seigo = eventData.status === 'correct' ? '正解' : '不正解';
-    const nyuuryoku = eventData.val;
-    const log = seigo + ':' + who + ' ' + zahyo + '：' + nyuuryoku;
-    const txarea = document.getElementById('log');
-    txarea.value += log + "\n";
-    txarea.scrollTop = txarea.scrollHeight;
+    if (eventData.status === 'Correct' || eventData.status === 'InCorrect') {
+        //今は文字を画面に表示しているだけなので文字列で送ってくるだけで良い……。
+        const who = (eventData.matchUserId === pubUserId || eventData.matchUserId === subUserId) ? '自分' : '相手';
+        const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
+        const seigo = eventData.status === 'Correct' ? '正解' : '不正解';
+        const nyuuryoku = eventData.val;
+        const log = seigo + ':' + who + ' ' + zahyo + '：' + nyuuryoku;
+        const txarea = document.getElementById('log');
+        txarea.value += log + "\n";
+        txarea.scrollTop = txarea.scrollHeight;
+    } else if (eventData.status === 'CheckHighOrLow') {
+        const who = (eventData.matchUserId === pubUserId || eventData.matchUserId === subUserId) ? '自分' : '相手';
+        const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
+        const type = 'HighOrLow'
+        const log = type + ':' + who + ' ' + zahyo;
+        const txarea = document.getElementById('log');
+        txarea.value += log + "\n";
+        txarea.scrollTop = txarea.scrollHeight;
+    }
+
 });
 //全盤面の情報取得
 //全盤面:どこのマスが誰に開けられているか
 //プレイヤーの状態:お手付きに入っているかなど(これは後回し)
 //現在見えている盤面と相違があるデータを取得した瞬間に色をつける
+//simpleとturn
 socketio.on('state', function (data) {
-    //json形式（通信量的に無駄は多いし、json.parseなどは重いので余裕があったら変更する）
     state = data;
-    //console.log('nagai state', state);
 
     let bData = state['board'];
     let points = state['points'];
@@ -301,9 +338,9 @@ socketio.on('state', function (data) {
 
     for (let i = 0; i < 9; i++) {
         for (let j = 0; j < 9; j++) {
-            let bkey = String(i) + String(j);
+            const bkey = String(i) + String(j);
             //値に変更があった場合、値をセットする
-            if (document.getElementById(bkey).textContent != bData[bkey].val) {
+            if (document.getElementById(bkey).textContent != bData[bkey].val && bData[bkey].val !== '-') {//変更後の値が-のときは別に良い（これはHかLのときに-で上書き防止）
                 document.getElementById(bkey).textContent = bData[bkey].val;
                 if (bData[bkey].id === pubUserId || bData[bkey].id === subUserId) {
                     //classをつける
@@ -329,9 +366,9 @@ socketio.on('stateInfiniteMode', function (data) {
 
     for (let i = 0; i < 9; i++) {
         for (let j = 0; j < 9; j++) {
-            let bkey = String(i) + String(j);
+            const bkey = String(i) + String(j);
             //値に変更があった場合、値をセットする
-            if (document.getElementById(bkey).textContent != bData[bkey].val) {
+            if (document.getElementById(bkey).textContent !== bData[bkey].val && bData[bkey].val !== '-') {//変更後の値が-のときは別に良い（これはHかLのときに-で上書き防止）
                 document.getElementById(bkey).textContent = bData[bkey].val;
                 if (bData[bkey].id === pubUserId || bData[bkey].id === subUserId) {
                     //classをつける
@@ -459,9 +496,11 @@ function goGameButtonClick(e) {
     }
 }
 
-// 問題パネルのマスが押された時の処理
-// myClickクラスを一か所につける
-//ただし、つけているところをクリックしたら消せる
+/**
+ * 問題パネルのマスが押された時の処理 myClickクラスを一か所につける ただし、つけているところをクリックしたら消せる
+ * @param {*} e 
+ * @returns 
+ */
 function sudokuClick(e) {
     let onazi = false;
     if (e.target.classList.contains('myClick')) {
@@ -483,11 +522,12 @@ function sudokuClick(e) {
     socketio.emit("myselect", e.target.id);
 }
 
-// 数字選択のマスが押された時の処理
+/** 数字選択のマスを押した時の処理 */ 
 function selectClick(e) {
     console.log('nagai select click');
     if (singlePlayFlag) {
-        if (document.getElementsByClassName("myClick")[0] === undefined || document.getElementsByClassName("myClick")[0].textContent != "-") { return; }
+        if (document.getElementsByClassName("myClick")[0] === undefined ||
+            /^[1-9]+$/.test(document.getElementsByClassName("myClick")[0].textContent)) { return; }//1~9の数字が既に入っている場合
         let datas = document.getElementById("sudoku").querySelectorAll("tr");
         //本当は二重ループ回す必要ない
         outer_loop: for (let i = 0; i < datas.length; i++) {
@@ -526,7 +566,7 @@ function selectClick(e) {
         }
     } else if (gameMode === 'TurnMode') {
         if (startCountDown > 0) return;//カウントダウン中に押してもすぐ終了
-        if (document.getElementsByClassName("myClick")[0] === undefined || document.getElementsByClassName("myClick")[0].textContent != "-") { return; }
+        if (document.getElementsByClassName("myClick")[0] === undefined || /^[1-9]+$/.test(document.getElementsByClassName("myClick")[0].textContent)) { return; }//1-9でないときすぐ終了
 
         if (document.getElementsByClassName('myClick').length > 0) {
             let submitInfo = {
@@ -541,7 +581,7 @@ function selectClick(e) {
     else if (gameMode === 'SimpleMode') {
         //SinmpleMode
         if (startCountDown > 0) return;//カウントダウン中に押してもすぐ終了
-        if (document.getElementsByClassName("myClick")[0] === undefined || document.getElementsByClassName("myClick")[0].textContent != "-") { return; }
+        if (document.getElementsByClassName("myClick")[0] === undefined || /^[1-9]+$/.test(document.getElementsByClassName("myClick")[0].textContent)) { return; }
         if (document.getElementsByClassName('myClick').length > 0) {
             let submitInfo = {
                 roomId: roomId,
@@ -552,7 +592,7 @@ function selectClick(e) {
             socketio.emit('submitSimpleMode', submitInfo);
         }
     } else if (gameMode === 'InfiniteMode') {
-        if (document.getElementsByClassName("myClick")[0] === undefined || document.getElementsByClassName("myClick")[0].textContent != "-") { return; }
+        if (document.getElementsByClassName("myClick")[0] === undefined || /^[1-9]+$/.test(document.getElementsByClassName("myClick")[0].textContent)) { return; }
         if (document.getElementsByClassName('myClick').length > 0) {
             let submitInfo = {
                 roomId: roomId,

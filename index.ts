@@ -9,7 +9,7 @@ import AsyncLock from 'async-lock';
 /**
  * 現在の数独魔法陣盤面情報（見えている盤面）
  */
-interface board {
+interface Board {
     [coordinate: string]: {//座標。01~88まで。
         id: string,//当てた人のid 自動:auto,まだ:mada,プレイヤー:matchUserId
         val: string,//見えている値。数字の文字、まだ決まっていない値は-で表現
@@ -18,20 +18,21 @@ interface board {
 /**
  * 部屋に入っている二人のポイントを入れるオブジェクト用
  */
-interface points {
+interface Points {
     [matchUserId: string]: number
 }
 /**
  * 部屋ごとのゲーム情報を管理する
  */
-interface gameInfo {
-    board: board,
+interface GameInfo {
+    board: Board,
     answer: string,//その部屋の魔法陣の正解情報
-    points: points,//['points']['それぞれのuserのid']ここに各点数が入っている。matchUserIdが最初からもてれるならこれでよかったが……、そうではなく初期化時どうしようもないので…空で宣言してからみたいな使い方になる
+    points: Points,//['points']['それぞれのuserのid']ここに各点数が入っている。matchUserIdが最初からもてれるならこれでよかったが……、そうではなく初期化時どうしようもないので…空で宣言してからみたいな使い方になる
     startCountDown: number,//ゲーム開始時のカウントダウンの残り秒数。
-    logs: object[],//提出された情報の正解、不正解などの操作情報ログ
+    logs: EventData[],//提出された情報の正解、不正解などの操作情報ログ
     idTableMatchPub: { [matchUserId: string]: string },//matchUserIdとpubUserIdの対応。endgame時に使用
-    mode: mode,
+    mode: Mode,
+    users: { [matchUserId: string]: { remainingHighOrLowCount: number } },//ここにPointsもまとめてしまいたい……,元気があったらやる
     //以下turnmode時のみ存在。tsのエラーがめんどいのでany型に
     /** string[] ターンの順番、matchUserIdが入る。matchUserId0,'auto',matchUserId1,'auto'*/
     turnArray?: any,
@@ -47,26 +48,35 @@ interface gameInfo {
 /**
  * 部屋のIDがキーで、各部屋の情報を格納
  */
-interface roomDictionaryArray {
-    [rooms: string]: gameInfo
+interface RoomDictionaryArray {
+    [rooms: string]: GameInfo
 }
-type mode = 'SimpleMode' | 'TurnMode' | 'InfiniteMode';
+type Mode = 'SimpleMode' | 'TurnMode' | 'InfiniteMode';
 /**
  * go_gameゲームを開始したときにクライアントより送信されるデータ
  */
-interface gogamedata {
+interface GoGameData {
     roomId: string,
     passWord: string,
     pubUserId: string,
     subUserId: string,//同じブラウザ同士の対戦用のid
     name: string,
 }
+/** 答え提出時のデータ。memo:roomIdはsocket.dataに持つようにすれば送らなくても良い実装にできる */
+interface SubmitInfo { roomId: string, coordinate: string, val: string }
+/** その他提出データ */
+interface SubmitExtInfo { roomId: string, extType: ExtType, coordinate: string }
+type ExtType = 'HIGHORLOW';
+
+interface EventData { status: Status, matchUserId: string, val?: string, coordinate: string }
+type Status = 'Correct' | 'InCorrect' | 'CheckHighOrLow';
+
 /**
  * cosmosDBからとってきてメモリに保持する情報
  * idはpubUserId
  */
-interface usersCosmosDB { [id: string]: { pk: string, id: string, passWord: string, rate: number, name: string } }
-interface socketData { passWord: string, matchUserId: string, pubUserId: string }
+interface UsersCosmosDB { [id: string]: { pk: string, id: string, passWord: string, rate: number, name: string } }
+interface SocketData { passWord: string, matchUserId: string, pubUserId: string }
 
 //数独の問題と答えのセットを生成
 const answertext = fs.readFileSync("./answer.txt");
@@ -74,7 +84,9 @@ const astxt = answertext.toString();
 const answerlines = astxt.split('\n');
 const problemtext = fs.readFileSync("./problem.txt", 'utf8');
 const problemlines = problemtext.toString().split('\n');
+
 const INFINITROOM = 'InfiniteRoom';
+const INI_HIGHORLOWLASTNUM = 4;
 
 const app: express.Express = express()
 app.use(express.json())
@@ -82,7 +94,7 @@ app.use(express.urlencoded({ extended: true }))
 const PORT = process.env.PORT || 3000;
 
 //部屋ごとの盤面情報保持
-const gameInfos: roomDictionaryArray = {};
+const gameInfos: RoomDictionaryArray = {};
 
 /**
  * 排他処理用。同時に処理が走ると困るものについて使用。答え提出処理など
@@ -116,7 +128,7 @@ async function main() {
     const querySpec = {
         query: "select u.pk,u.id,u.passWord,u.rate,u.name from users u"
     };
-    let usersCosmos: usersCosmosDB;
+    let usersCosmos: UsersCosmosDB;
     // Get items 
     try {
         //cosmosDBが使いにくいので都度問い合わせるのでなく、
@@ -176,7 +188,7 @@ async function main() {
             const startboard = problemlines[problemnum];
             const answer = answerlines[problemnum];
 
-            const sboard: board = {};
+            const sboard: Board = {};
             // 通常のfor文で行う
             for (let i = 0; i < 81; i++) {
                 const syou = Math.floor(i / 9);
@@ -195,7 +207,7 @@ async function main() {
         });
 
         //待機ルームに入る用
-        socket.on('gogameSimpleMode', function (data: gogamedata) {
+        socket.on('gogameSimpleMode', function (data: GoGameData) {
             let roomId = data['roomId'];
             socket.data.passWord = data['passWord'];
             socket.data.subUserId = data['subUserId'];
@@ -299,7 +311,7 @@ async function main() {
                 //正常に部屋が立ったなら
                 //ゲームに必要な情報を作成する
                 //盤面の正解の情報,現在の盤面の状態
-                gameInfos[roomId] = generateStartGameInfo(cl0.data as socketData, cl1.data as socketData, 'SimpleMode');
+                gameInfos[roomId] = generateStartGameInfo(cl0.data as SocketData, cl1.data as SocketData, 'SimpleMode');
                 io.to(roomId).emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
                 const intervalid = setInterval(function () {
                     gameInfos[roomId]['startCountDown'] -= 1;
@@ -311,7 +323,7 @@ async function main() {
             }
         });
         //待機ルームに入る用
-        socket.on('gogameTurnMode', function (data: gogamedata) {
+        socket.on('gogameTurnMode', function (data: GoGameData) {
             let roomId = data['roomId'];
             socket.data.passWord = data['passWord'];
             socket.data.subUserId = data['subUserId'];
@@ -416,7 +428,7 @@ async function main() {
             //正常に部屋が立ったなら
             //ゲームに必要な情報を作成する
             //盤面の正解の情報,現在の盤面の状態
-            gameInfos[roomId] = generateStartGameInfo(cl0.data as socketData, cl1.data as socketData, 'TurnMode');
+            gameInfos[roomId] = generateStartGameInfo(cl0.data as SocketData, cl1.data as SocketData, 'TurnMode');
             io.to(roomId).emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
 
             let iterCnt = 0;
@@ -521,7 +533,7 @@ async function main() {
             }, 1000);
         });
         //待機ルームに入る用
-        socket.on('gogameInfiniteMode', function (data: gogamedata) {
+        socket.on('gogameInfiniteMode', function (data: GoGameData) {
             socket.data.passWord = data['passWord'];
             socket.data.subUserId = data['subUserId'];
             socket.data.pubUserId = data['pubUserId'];
@@ -596,19 +608,26 @@ async function main() {
         });
 
         //クライアントから受けた数独提出答え受け取り用
-        socket.on('submitSimpleMode', function (submitInfo) {
+        socket.on('submitSimpleMode', function (submitInfo: SubmitInfo) {
             console.log('submitInfo: ', submitInfo);
             check(submitInfo, socket);
         });
         //クライアントから受けた数独提出答え受け取り用
-        socket.on('submitTurnMode', function (submitInfo) {
+        socket.on('submitTurnMode', function (submitInfo: SubmitInfo) {
             console.log('submitInfo: ', submitInfo);
             checkTurnModeAnswer(submitInfo, socket);
         });
         //クライアントから受けた数独提出答え受け取り用
-        socket.on('submitInfiniteMode', function (submitInfo) {
+        socket.on('submitInfiniteMode', function (submitInfo: SubmitInfo) {
             console.log('submitInfo: ', submitInfo);
             checkInfiniteMode(submitInfo, socket);
+        });
+
+        //クライアントから受けた数独提出その他情報
+        socket.on('submitExt', function (submitExtInfo: SubmitExtInfo) {
+            if (submitExtInfo.extType === 'HIGHORLOW') {
+                highOrRowCheck(submitExtInfo, socket);
+            }
         });
 
         socket.on('myselect', function (data) {
@@ -645,12 +664,13 @@ async function main() {
     /**
      * 新しく作られた部屋のゲーム情報を生成する
      * 魔法陣の正解情報、現在の盤面など
+     * simple turn兼用
      * @param data0 socketのdata
      * @param data1 
      * @param 
      * @returns 
      */
-    function generateStartGameInfo(data0: socketData, data1: socketData, mode: mode) {
+    function generateStartGameInfo(data0: SocketData, data1: SocketData, mode: Mode) {
         const problemnum = getRandomInt(500);
         const startboard = problemlines[problemnum];
         const answer = answerlines[problemnum];
@@ -658,7 +678,7 @@ async function main() {
         const askaigyo = asarray?.join('\n');
         console.log(askaigyo);//デバッグで自分で入力するとき用に魔法陣の答え出力
 
-        const board: board = {};
+        const board: Board = {};
         // 通常のfor文で行う
         for (let i = 0; i < 81; i++) {
             const syou = Math.floor(i / 9);
@@ -671,12 +691,13 @@ async function main() {
             }
             board[coord] = { id: inid, val: inval };
         }
-        const rtobj: gameInfo = {
+        const rtobj: GameInfo = {
             board: board,
             answer: answer, points: { [data0.matchUserId]: 0, [data1.matchUserId]: 0 },
             logs: [], startCountDown: 6,
             idTableMatchPub: { [data0.matchUserId]: data0.pubUserId, [data1.matchUserId]: data1.pubUserId },
-            mode: mode
+            mode: mode,
+            users: { [data0.matchUserId]: { remainingHighOrLowCount: INI_HIGHORLOWLASTNUM }, [data1.matchUserId]: { remainingHighOrLowCount: INI_HIGHORLOWLASTNUM } }
         };
         if (mode === 'TurnMode') {
             const data = [data0.matchUserId, data1.matchUserId];
@@ -704,7 +725,7 @@ async function main() {
         const askaigyo = asarray?.join('\n');
         console.log(askaigyo);//デバッグで自分で入力するとき用に魔法陣の答え出力
 
-        const board: board = {};
+        const board: Board = {};
         // 通常のfor文で行う
         for (let i = 0; i < 81; i++) {
             const syou = Math.floor(i / 9);
@@ -717,13 +738,14 @@ async function main() {
             }
             board[coord] = { id: inid, val: inval };
         }
-        const rtobj: gameInfo = {
+        const rtobj: GameInfo = {
             board: board,
             answer: answer, points: {},
             logs: [], startCountDown: 6,
             idTableMatchPub: {},
-            mode: 'InfiniteMode'
-        };
+            mode: 'InfiniteMode',
+            users: {}
+        }
         return rtobj;
     }
     /**
@@ -731,11 +753,15 @@ async function main() {
      * @param submitInfo 
      * @param socket 
      */
-    function check(submitInfo: { roomId: string, coordinate: string, val: string }, socket: socketio.Socket) {
+    function check(submitInfo: SubmitInfo, socket: socketio.Socket) {
         const rmid = submitInfo['roomId'];
         lock.acquire(rmid, function () {
             if (gameInfos[rmid]['startCountDown'] > 0) {
                 console.log('カウントダウン中のため入力棄却');
+                return;
+            }
+            if (!gameInfos[rmid]) {
+                console.log('既にゲーム終了しているため棄却');
                 return;
             }
             const cod = submitInfo['coordinate'];
@@ -750,13 +776,13 @@ async function main() {
                 gameInfos[rmid]['board'][cod]['val'] = val;
                 gameInfos[rmid]['board'][cod]['id'] = matchUserId;
                 gameInfos[rmid]['points'][matchUserId] += parseInt(val);
-                eventData = { status: 'correct', matchUserId: matchUserId, val: val, coordinate: cod };
+                eventData = { status: 'Correct' as Status, matchUserId: matchUserId, val: val, coordinate: cod };
                 gameInfos[rmid]['logs'].push(eventData);
             } else if (gameInfos[rmid]['board'][cod]['val'] === '-') {
                 console.log('不正解');
                 //不正解の場合減点
                 gameInfos[rmid]['points'][matchUserId] -= parseInt(val);
-                eventData = { status: 'incorrect', matchUserId: matchUserId, val: val, coordinate: cod };
+                eventData = { status: 'InCorrect' as Status, matchUserId: matchUserId, val: val, coordinate: cod };
                 gameInfos[rmid]['logs'].push(eventData);
             }
             io.to(rmid).emit('event', eventData);
@@ -803,9 +829,14 @@ async function main() {
      * @param submitInfo 
      * @param socket 
      */
-    function checkInfiniteMode(submitInfo: { roomId: string, coordinate: string, val: string }, socket: socketio.Socket) {
+    function checkInfiniteMode(submitInfo: SubmitInfo, socket: socketio.Socket) {
         const rmid = INFINITROOM;
         lock.acquire(rmid, function () {
+            if (!gameInfos[rmid]) {
+                console.log('既にゲーム終了しているため棄却');
+                return;
+            }
+
             const cod = submitInfo['coordinate'];
             const val: string = submitInfo['val'];
             const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
@@ -818,13 +849,13 @@ async function main() {
                 gameInfos[rmid]['board'][cod]['val'] = val;
                 gameInfos[rmid]['board'][cod]['id'] = matchUserId;
                 gameInfos[rmid]['points'][matchUserId] += parseInt(val);
-                eventData = { status: 'correct', matchUserId: matchUserId, val: val, coordinate: cod };
+                eventData = { status: 'Correct' as Status, matchUserId: matchUserId, val: val, coordinate: cod };
                 gameInfos[rmid]['logs'].push(eventData);
             } else if (gameInfos[rmid]['board'][cod]['val'] === '-') {
                 console.log('不正解');
                 //不正解の場合減点
                 gameInfos[rmid]['points'][matchUserId] -= parseInt(val);
-                eventData = { status: 'incorrect', matchUserId: matchUserId, val: val, coordinate: cod };
+                eventData = { status: 'InCorrect' as Status, matchUserId: matchUserId, val: val, coordinate: cod };
                 gameInfos[rmid]['logs'].push(eventData);
             }
             io.to(rmid).emit('event', eventData);
@@ -862,14 +893,19 @@ async function main() {
  * @param submitInfo 
  * @param socket 
  */
-    function checkTurnModeAnswer(submitInfo: { roomId: string, coordinate: string, val: string }, socket: socketio.Socket) {
+    function checkTurnModeAnswer(submitInfo: SubmitInfo, socket: socketio.Socket) {
         const rmid = submitInfo['roomId'];
         lock.acquire(rmid, function () {
             if (gameInfos[rmid]['startCountDown'] > 0) {
                 console.log('カウントダウン中のため入力棄却');
                 return;
             }
-            if (gameInfos[rmid]['turnArray'][gameInfos[rmid]['turnIndex']] === socket.data.matchUserId) {
+            if (!gameInfos[rmid]) {
+                console.log('既にゲーム終了しているため棄却');
+                return;
+            }
+
+            if (gameInfos[rmid]['turnArray'][gameInfos[rmid]['turnIndex']] === socket.data.matchUserId) {//提出者のターンなら
                 const cod = submitInfo['coordinate'];
                 const val: string = submitInfo['val'];
                 const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
@@ -886,14 +922,14 @@ async function main() {
                     gameInfos[rmid]['board'][cod]['id'] = matchUserId;
                     gameInfos[rmid]['points'][matchUserId] += parseInt(val);
                     gameInfos[rmid]['countdown'] += 10;//正解したら+10秒
-                    eventData = { status: 'correct', matchUserId: matchUserId, val: val, coordinate: cod };
+                    eventData = { status: 'Correct' as Status, matchUserId: matchUserId, val: val, coordinate: cod };
                     gameInfos[rmid]['logs'].push(eventData);
                 } else if (gameInfos[rmid]['board'][cod]['val'] === '-') {
                     console.log('不正解');
                     //不正解の場合減点
                     gameInfos[rmid]['points'][matchUserId] -= parseInt(val);
                     gameInfos[rmid]['countdown'] = -1;
-                    eventData = { status: 'incorrect', matchUserId: matchUserId, val: val, coordinate: cod };
+                    eventData = { status: 'InCorrect' as Status, matchUserId: matchUserId, val: val, coordinate: cod };
                     gameInfos[rmid]['logs'].push(eventData);
                 }
                 io.to(rmid).emit('event', eventData);
@@ -902,6 +938,45 @@ async function main() {
                 //自分のターンではない
                 console.log('対象のユーザーのターンでないため入力棄却');
             }
+        });
+    }
+    /**
+ * 提出された回答を判定して、二人のユーザーに結果送信
+ * @param submitInfo 
+ * @param socket 
+ */
+    function highOrRowCheck(submitExtInfo: SubmitExtInfo, socket: socketio.Socket) {
+        const rmid = submitExtInfo['roomId'];
+        lock.acquire(rmid, function () {
+            if (gameInfos[rmid]['startCountDown'] > 0) {
+                console.log('カウントダウン中のため入力棄却');
+                return;
+            }
+            if (!gameInfos[rmid]) {
+                console.log('既にゲーム終了しているため棄却');
+                return;
+            }
+            const cod = submitExtInfo['coordinate'];
+            if (gameInfos[rmid]['board'][cod]['val'] !== '-') {
+                console.log('既に値が判明しているため棄却');
+                return;
+            }
+            const matchUserId = socket.data.matchUserId;
+            if (gameInfos[rmid].users[matchUserId].remainingHighOrLowCount < 1) {
+                console.log('High or Low使用回数を使い切ったため棄却');
+                return;
+            }
+            const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
+            const highOrLow = parseInt(gameInfos[rmid]['answer'][indx]) >= 5 ? 'H' : 'L';
+
+            gameInfos[rmid].users[matchUserId].remainingHighOrLowCount--;
+
+            const eventData: EventData = { status: 'CheckHighOrLow' as Status, matchUserId: matchUserId, coordinate: cod };
+            gameInfos[rmid]['logs'].push(eventData);
+            io.to(rmid).emit('event', eventData);
+            
+            const returnData = { status: 'CheckHighOrLow' as Status, matchUserId: matchUserId, coordinate: cod, highOrLow: highOrLow, remainingHighOrLowCount: gameInfos[rmid].users[matchUserId].remainingHighOrLowCount };
+            socket.emit('ext', returnData);//statusで返したほうが正しい気もする。
         });
     }
 }

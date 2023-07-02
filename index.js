@@ -17,6 +17,7 @@ const answerlines = astxt.split('\n');
 const problemtext = fs_1.default.readFileSync("./problem.txt", 'utf8');
 const problemlines = problemtext.toString().split('\n');
 const INFINITROOM = 'InfiniteRoom';
+const INI_HIGHORLOWLASTNUM = 4;
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
@@ -527,6 +528,12 @@ async function main() {
             console.log('submitInfo: ', submitInfo);
             checkInfiniteMode(submitInfo, socket);
         });
+        //クライアントから受けた数独提出その他情報
+        socket.on('submitExt', function (submitExtInfo) {
+            if (submitExtInfo.extType === 'HIGHORLOW') {
+                highOrRowCheck(submitExtInfo, socket);
+            }
+        });
         socket.on('myselect', function (data) {
             //自分が選択しているところの座標を相手にだけ送る
             //相手のsocketidに送る。
@@ -560,6 +567,7 @@ async function main() {
     /**
      * 新しく作られた部屋のゲーム情報を生成する
      * 魔法陣の正解情報、現在の盤面など
+     * simple turn兼用
      * @param data0 socketのdata
      * @param data1
      * @param
@@ -590,7 +598,8 @@ async function main() {
             answer: answer, points: { [data0.matchUserId]: 0, [data1.matchUserId]: 0 },
             logs: [], startCountDown: 6,
             idTableMatchPub: { [data0.matchUserId]: data0.pubUserId, [data1.matchUserId]: data1.pubUserId },
-            mode: mode
+            mode: mode,
+            users: { [data0.matchUserId]: { remainingHighOrLowCount: INI_HIGHORLOWLASTNUM }, [data1.matchUserId]: { remainingHighOrLowCount: INI_HIGHORLOWLASTNUM } }
         };
         if (mode === 'TurnMode') {
             const data = [data0.matchUserId, data1.matchUserId];
@@ -635,7 +644,8 @@ async function main() {
             answer: answer, points: {},
             logs: [], startCountDown: 6,
             idTableMatchPub: {},
-            mode: 'InfiniteMode'
+            mode: 'InfiniteMode',
+            users: {}
         };
         return rtobj;
     }
@@ -651,6 +661,10 @@ async function main() {
                 console.log('カウントダウン中のため入力棄却');
                 return;
             }
+            if (!gameInfos[rmid]) {
+                console.log('既にゲーム終了しているため棄却');
+                return;
+            }
             const cod = submitInfo['coordinate'];
             const val = submitInfo['val'];
             const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
@@ -662,14 +676,14 @@ async function main() {
                 gameInfos[rmid]['board'][cod]['val'] = val;
                 gameInfos[rmid]['board'][cod]['id'] = matchUserId;
                 gameInfos[rmid]['points'][matchUserId] += parseInt(val);
-                eventData = { status: 'correct', matchUserId: matchUserId, val: val, coordinate: cod };
+                eventData = { status: 'Correct', matchUserId: matchUserId, val: val, coordinate: cod };
                 gameInfos[rmid]['logs'].push(eventData);
             }
             else if (gameInfos[rmid]['board'][cod]['val'] === '-') {
                 console.log('不正解');
                 //不正解の場合減点
                 gameInfos[rmid]['points'][matchUserId] -= parseInt(val);
-                eventData = { status: 'incorrect', matchUserId: matchUserId, val: val, coordinate: cod };
+                eventData = { status: 'InCorrect', matchUserId: matchUserId, val: val, coordinate: cod };
                 gameInfos[rmid]['logs'].push(eventData);
             }
             io.to(rmid).emit('event', eventData);
@@ -718,6 +732,10 @@ async function main() {
     function checkInfiniteMode(submitInfo, socket) {
         const rmid = INFINITROOM;
         lock.acquire(rmid, function () {
+            if (!gameInfos[rmid]) {
+                console.log('既にゲーム終了しているため棄却');
+                return;
+            }
             const cod = submitInfo['coordinate'];
             const val = submitInfo['val'];
             const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
@@ -729,14 +747,14 @@ async function main() {
                 gameInfos[rmid]['board'][cod]['val'] = val;
                 gameInfos[rmid]['board'][cod]['id'] = matchUserId;
                 gameInfos[rmid]['points'][matchUserId] += parseInt(val);
-                eventData = { status: 'correct', matchUserId: matchUserId, val: val, coordinate: cod };
+                eventData = { status: 'Correct', matchUserId: matchUserId, val: val, coordinate: cod };
                 gameInfos[rmid]['logs'].push(eventData);
             }
             else if (gameInfos[rmid]['board'][cod]['val'] === '-') {
                 console.log('不正解');
                 //不正解の場合減点
                 gameInfos[rmid]['points'][matchUserId] -= parseInt(val);
-                eventData = { status: 'incorrect', matchUserId: matchUserId, val: val, coordinate: cod };
+                eventData = { status: 'InCorrect', matchUserId: matchUserId, val: val, coordinate: cod };
                 gameInfos[rmid]['logs'].push(eventData);
             }
             io.to(rmid).emit('event', eventData);
@@ -780,7 +798,11 @@ async function main() {
                 console.log('カウントダウン中のため入力棄却');
                 return;
             }
-            if (gameInfos[rmid]['turnArray'][gameInfos[rmid]['turnIndex']] === socket.data.matchUserId) {
+            if (!gameInfos[rmid]) {
+                console.log('既にゲーム終了しているため棄却');
+                return;
+            }
+            if (gameInfos[rmid]['turnArray'][gameInfos[rmid]['turnIndex']] === socket.data.matchUserId) { //提出者のターンなら
                 const cod = submitInfo['coordinate'];
                 const val = submitInfo['val'];
                 const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
@@ -795,7 +817,7 @@ async function main() {
                     gameInfos[rmid]['board'][cod]['id'] = matchUserId;
                     gameInfos[rmid]['points'][matchUserId] += parseInt(val);
                     gameInfos[rmid]['countdown'] += 10; //正解したら+10秒
-                    eventData = { status: 'correct', matchUserId: matchUserId, val: val, coordinate: cod };
+                    eventData = { status: 'Correct', matchUserId: matchUserId, val: val, coordinate: cod };
                     gameInfos[rmid]['logs'].push(eventData);
                 }
                 else if (gameInfos[rmid]['board'][cod]['val'] === '-') {
@@ -803,7 +825,7 @@ async function main() {
                     //不正解の場合減点
                     gameInfos[rmid]['points'][matchUserId] -= parseInt(val);
                     gameInfos[rmid]['countdown'] = -1;
-                    eventData = { status: 'incorrect', matchUserId: matchUserId, val: val, coordinate: cod };
+                    eventData = { status: 'InCorrect', matchUserId: matchUserId, val: val, coordinate: cod };
                     gameInfos[rmid]['logs'].push(eventData);
                 }
                 io.to(rmid).emit('event', eventData);
@@ -815,8 +837,45 @@ async function main() {
             }
         });
     }
+    /**
+ * 提出された回答を判定して、二人のユーザーに結果送信
+ * @param submitInfo
+ * @param socket
+ */
+    function highOrRowCheck(submitExtInfo, socket) {
+        const rmid = submitExtInfo['roomId'];
+        lock.acquire(rmid, function () {
+            if (gameInfos[rmid]['startCountDown'] > 0) {
+                console.log('カウントダウン中のため入力棄却');
+                return;
+            }
+            if (!gameInfos[rmid]) {
+                console.log('既にゲーム終了しているため棄却');
+                return;
+            }
+            const cod = submitExtInfo['coordinate'];
+            if (gameInfos[rmid]['board'][cod]['val'] !== '-') {
+                console.log('既に値が判明しているため棄却');
+                return;
+            }
+            const matchUserId = socket.data.matchUserId;
+            if (gameInfos[rmid].users[matchUserId].remainingHighOrLowCount < 1) {
+                console.log('High or Low使用回数を使い切ったため棄却');
+                return;
+            }
+            const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
+            const highOrLow = parseInt(gameInfos[rmid]['answer'][indx]) >= 5 ? 'H' : 'L';
+            gameInfos[rmid].users[matchUserId].remainingHighOrLowCount--;
+            const eventData = { status: 'CheckHighOrLow', matchUserId: matchUserId, coordinate: cod };
+            gameInfos[rmid]['logs'].push(eventData);
+            io.to(rmid).emit('event', eventData);
+            const returnData = { status: 'CheckHighOrLow', matchUserId: matchUserId, coordinate: cod, highOrLow: highOrLow, remainingHighOrLowCount: gameInfos[rmid].users[matchUserId].remainingHighOrLowCount };
+            socket.emit('ext', returnData); //statusで返したほうが正しい気もする。
+        });
+    }
 }
 main().catch(e => { console.log(e); });
 function getRandomInt(max) {
     return Math.floor(Math.random() * max);
 }
+//# sourceMappingURL=index.js.map
