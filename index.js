@@ -17,7 +17,8 @@ const answerlines = astxt.split('\n');
 const problemtext = fs_1.default.readFileSync("./problem.txt", 'utf8');
 const problemlines = problemtext.toString().split('\n');
 const INFINITROOM = 'InfiniteRoom';
-const INI_HIGHORLOWLASTNUM = 4;
+/** High or lowを使える残りの初期値 */
+const INI_REMAINING_HIGHORLOW = 4;
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
@@ -173,7 +174,8 @@ async function main() {
                 socket.leave('waitingroom_turn');
                 socket.join(roomId);
                 socket.emit('match', roomId);
-                socket.emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
+                const returnState = { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'], highOrLowHistory: gameInfos[roomId].users[socket.data.matchUserId].highOrLowHistory, remainingHighOrLowCount: gameInfos[roomId].users[socket.data.matchUserId].remainingHighOrLowCount };
+                socket.emit('state', returnState);
                 return;
             }
             //中断した部屋がなく開始の場合
@@ -227,7 +229,8 @@ async function main() {
                 //ゲームに必要な情報を作成する
                 //盤面の正解の情報,現在の盤面の状態
                 gameInfos[roomId] = generateStartGameInfo(cl0.data, cl1.data, 'SimpleMode');
-                io.to(roomId).emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
+                const returnState = { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'], highOrLowHistory: [], remainingHighOrLowCount: INI_REMAINING_HIGHORLOW };
+                io.to(roomId).emit('state', returnState);
                 const intervalid = setInterval(function () {
                     gameInfos[roomId]['startCountDown'] -= 1;
                     io.to(roomId).emit("startCountDown", gameInfos[roomId]['startCountDown']);
@@ -283,8 +286,8 @@ async function main() {
                 socket.leave('waitingroom_simple'); //一応ちゃんと抜ける
                 socket.leave('waitingroom_turn');
                 socket.join(roomId);
-                socket.emit('match', roomId);
-                socket.emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
+                const returnState = { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'], highOrLowHistory: gameInfos[roomId].users[socket.data.matchUserId].highOrLowHistory, remainingHighOrLowCount: gameInfos[roomId].users[socket.data.matchUserId].remainingHighOrLowCount };
+                socket.emit('state', returnState);
                 return;
             }
             //中断した部屋がなく開始の場合
@@ -339,7 +342,8 @@ async function main() {
             //ゲームに必要な情報を作成する
             //盤面の正解の情報,現在の盤面の状態
             gameInfos[roomId] = generateStartGameInfo(cl0.data, cl1.data, 'TurnMode');
-            io.to(roomId).emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
+            const returnState = { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'], highOrLowHistory: [], remainingHighOrLowCount: INI_REMAINING_HIGHORLOW };
+            io.to(roomId).emit('state', returnState);
             let iterCnt = 0;
             //処理が長引く場合は１秒以上かかる。setIntervalは最悪処理が並行で走るのでsetTimeoutに
             setTimeout(function gameCountDownFunction() {
@@ -384,7 +388,8 @@ async function main() {
                                 gameInfos[roomId]['board'][randomKey] = { id: 'auto', val: gameInfos[roomId]['answer'][indx] };
                                 const eventData = { status: 'auto', matchUserId: 'auto', val: gameInfos[roomId]['answer'][indx], coordinate: randomKey };
                                 io.to(roomId).emit("event", eventData);
-                                io.to(roomId).emit("state", { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
+                                //io.to(roomId).emit('state', { board: gameInfos[roomId]['board'], points: gameInfos[roomId]['points'] });
+                                emitStateAllRoomMember(roomId, io);
                             }
                         }
                         else {
@@ -497,7 +502,8 @@ async function main() {
             //正常に部屋が立ったなら
             //ゲームに必要な情報を作成する
             //盤面の正解の情報,現在の盤面の状態
-            io.to(INFINITROOM).emit("state", { board: gameInfos[INFINITROOM]['board'], points: gameInfos[INFINITROOM]['points'] });
+            //io.to(INFINITROOM).emit('state', { board: gameInfos[INFINITROOM]['board'], points: gameInfos[INFINITROOM]['points'] });
+            emitStateAllRoomMember(INFINITROOM, io);
         });
         //ホバー
         socket.on('hover', function (data) {
@@ -599,7 +605,7 @@ async function main() {
             logs: [], startCountDown: 6,
             idTableMatchPub: { [data0.matchUserId]: data0.pubUserId, [data1.matchUserId]: data1.pubUserId },
             mode: mode,
-            users: { [data0.matchUserId]: { remainingHighOrLowCount: INI_HIGHORLOWLASTNUM }, [data1.matchUserId]: { remainingHighOrLowCount: INI_HIGHORLOWLASTNUM } }
+            users: { [data0.matchUserId]: { remainingHighOrLowCount: INI_REMAINING_HIGHORLOW, highOrLowHistory: [] }, [data1.matchUserId]: { remainingHighOrLowCount: INI_REMAINING_HIGHORLOW, highOrLowHistory: [] } }
         };
         if (mode === 'TurnMode') {
             const data = [data0.matchUserId, data1.matchUserId];
@@ -657,44 +663,7 @@ async function main() {
     function check(submitInfo, socket) {
         const rmid = submitInfo['roomId'];
         lock.acquire(rmid, function () {
-            if (gameInfos[rmid]['startCountDown'] > 0) {
-                console.log('カウントダウン中のため入力棄却');
-                return;
-            }
-            if (!gameInfos[rmid]) {
-                console.log('既にゲーム終了しているため棄却');
-                return;
-            }
-            const cod = submitInfo['coordinate'];
-            const val = submitInfo['val'];
-            const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
-            const matchUserId = socket.data.matchUserId;
-            let eventData;
-            if (gameInfos[rmid]['answer'][indx] === val && gameInfos[rmid]['board'][cod]['val'] === '-') { //まだ値が入っていないものに対して
-                //正解の場合
-                console.log('正解');
-                gameInfos[rmid]['board'][cod]['val'] = val;
-                gameInfos[rmid]['board'][cod]['id'] = matchUserId;
-                gameInfos[rmid]['points'][matchUserId] += parseInt(val);
-                eventData = { status: 'Correct', matchUserId: matchUserId, val: val, coordinate: cod };
-                gameInfos[rmid]['logs'].push(eventData);
-            }
-            else if (gameInfos[rmid]['board'][cod]['val'] === '-') {
-                console.log('不正解');
-                //不正解の場合減点
-                gameInfos[rmid]['points'][matchUserId] -= parseInt(val);
-                eventData = { status: 'InCorrect', matchUserId: matchUserId, val: val, coordinate: cod };
-                gameInfos[rmid]['logs'].push(eventData);
-            }
-            io.to(rmid).emit('event', eventData);
-            io.to(rmid).emit("state", { board: gameInfos[rmid]['board'], points: gameInfos[rmid]['points'] });
-            // 終了検知
-            let endgame = true;
-            Object.keys(gameInfos[rmid]['board']).forEach(key => {
-                if (gameInfos[rmid]['board'][key]['val'] === '-') {
-                    endgame = false;
-                } //nagai foreachを途中でやめることはできないらしい……無駄すぎるがとりあえず
-            });
+            const endgame = checkSubimtBoardEmit(submitInfo, socket, rmid, io);
             if (endgame === true) {
                 console.log('ルーム:', rmid, 'のゲーム終了');
                 //面倒なのでとりあえず画面側でstateから判定してもらう
@@ -725,47 +694,14 @@ async function main() {
         });
     }
     /**
-     * 提出された回答を判定して、二人のユーザーに結果送信
+     * 提出された回答を判定して、全てのユーザーに結果送信
      * @param submitInfo
      * @param socket
      */
     function checkInfiniteMode(submitInfo, socket) {
         const rmid = INFINITROOM;
         lock.acquire(rmid, function () {
-            if (!gameInfos[rmid]) {
-                console.log('既にゲーム終了しているため棄却');
-                return;
-            }
-            const cod = submitInfo['coordinate'];
-            const val = submitInfo['val'];
-            const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
-            const matchUserId = socket.data.matchUserId;
-            let eventData;
-            if (gameInfos[rmid]['answer'][indx] === val && gameInfos[rmid]['board'][cod]['val'] === '-') { //まだ値が入っていないものに対して
-                //正解の場合
-                console.log('正解');
-                gameInfos[rmid]['board'][cod]['val'] = val;
-                gameInfos[rmid]['board'][cod]['id'] = matchUserId;
-                gameInfos[rmid]['points'][matchUserId] += parseInt(val);
-                eventData = { status: 'Correct', matchUserId: matchUserId, val: val, coordinate: cod };
-                gameInfos[rmid]['logs'].push(eventData);
-            }
-            else if (gameInfos[rmid]['board'][cod]['val'] === '-') {
-                console.log('不正解');
-                //不正解の場合減点
-                gameInfos[rmid]['points'][matchUserId] -= parseInt(val);
-                eventData = { status: 'InCorrect', matchUserId: matchUserId, val: val, coordinate: cod };
-                gameInfos[rmid]['logs'].push(eventData);
-            }
-            io.to(rmid).emit('event', eventData);
-            io.to(rmid).emit("state", { board: gameInfos[rmid]['board'], points: gameInfos[rmid]['points'] });
-            // 終了検知
-            let endgame = true;
-            Object.keys(gameInfos[rmid]['board']).forEach(key => {
-                if (gameInfos[rmid]['board'][key]['val'] === '-') {
-                    endgame = false;
-                }
-            });
+            const endgame = checkSubimtBoardEmit(submitInfo, socket, rmid, io);
             if (endgame === true) {
                 console.log('ルーム:', rmid, 'のゲーム終了');
                 setTimeout(() => {
@@ -775,10 +711,9 @@ async function main() {
                         rclients?.forEach(cl => {
                             const sk = io.sockets.sockets.get(cl);
                             if (sk?.data.matchUserId) {
-                                gameInfos[rmid]['points'][sk.data.matchUserId] = 0;
+                                gameInfos[rmid]['points'][sk.data.matchUserId] = 0; //初期化？
                             }
                         });
-                        io.to(rmid).emit('stateInfiniteMode');
                     });
                 }, 5000);
             }
@@ -828,8 +763,10 @@ async function main() {
                     eventData = { status: 'InCorrect', matchUserId: matchUserId, val: val, coordinate: cod };
                     gameInfos[rmid]['logs'].push(eventData);
                 }
+                //const returnState: ReturnState = { board: gameInfos[rmid]['board'], points: gameInfos[rmid]['points'], highOrLowHistory: gameInfos[rmid].users[matchUserId].highOrLowHistory, remainingHighOrLowCount: gameInfos[rmid].users[matchUserId].remainingHighOrLowCount };
                 io.to(rmid).emit('event', eventData);
-                io.to(rmid).emit("state", { board: gameInfos[rmid]['board'], points: gameInfos[rmid]['points'] });
+                //io.to(rmid).emit('state', returnState);
+                emitStateAllRoomMember(rmid, io);
             }
             else {
                 //自分のターンではない
@@ -838,7 +775,7 @@ async function main() {
         });
     }
     /**
- * 提出された回答を判定して、二人のユーザーに結果送信
+ * 提出されたhighorlowを判定して、提出者に結果送信
  * @param submitInfo
  * @param socket
  */
@@ -865,17 +802,83 @@ async function main() {
             }
             const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
             const highOrLow = parseInt(gameInfos[rmid]['answer'][indx]) >= 5 ? 'H' : 'L';
+            gameInfos[rmid].users[matchUserId].highOrLowHistory.push({ coordinate: cod, highOrLow: highOrLow });
             gameInfos[rmid].users[matchUserId].remainingHighOrLowCount--;
             const eventData = { status: 'CheckHighOrLow', matchUserId: matchUserId, coordinate: cod };
             gameInfos[rmid]['logs'].push(eventData);
             io.to(rmid).emit('event', eventData);
-            const returnData = { status: 'CheckHighOrLow', matchUserId: matchUserId, coordinate: cod, highOrLow: highOrLow, remainingHighOrLowCount: gameInfos[rmid].users[matchUserId].remainingHighOrLowCount };
-            socket.emit('ext', returnData); //statusで返したほうが正しい気もする。
+            const returnState = { board: gameInfos[rmid]['board'], points: gameInfos[rmid]['points'], highOrLowHistory: gameInfos[rmid].users[matchUserId].highOrLowHistory, remainingHighOrLowCount: gameInfos[rmid].users[matchUserId].remainingHighOrLowCount };
+            socket.emit('state', returnState);
         });
     }
 }
 main().catch(e => { console.log(e); });
 function getRandomInt(max) {
     return Math.floor(Math.random() * max);
+}
+/**
+ * 対象の盤面に提出された回答チェック、配信、終了検知（Simple,Infiniteのみ。ターンモード以外）
+ * @param submitInfo
+ * @param socket
+ * @param rmid
+ * @param io
+ * @returns {boolean} endgame ゲーム終了検知したらtrue
+ */
+function checkSubimtBoardEmit(submitInfo, socket, rmid, io) {
+    if (gameInfos[rmid]['startCountDown'] > 0) {
+        console.log('カウントダウン中のため入力棄却');
+        return false;
+    }
+    if (!gameInfos[rmid]) {
+        console.log('既にゲーム終了しているため棄却');
+        return false;
+    }
+    const cod = submitInfo['coordinate'];
+    if (gameInfos[rmid]['board'][cod]['val'] !== '-') {
+        console.log('既に回答されているエリアのため棄却');
+        return false;
+    }
+    const val = submitInfo['val'];
+    const indx = parseInt(cod[0]) * 9 + parseInt(cod[1]);
+    const matchUserId = socket.data.matchUserId;
+    let eventData;
+    if (gameInfos[rmid]['answer'][indx] === val) {
+        //正解の場合
+        console.log('正解');
+        gameInfos[rmid]['board'][cod]['val'] = val;
+        gameInfos[rmid]['board'][cod]['id'] = matchUserId;
+        gameInfos[rmid]['points'][matchUserId] += parseInt(val);
+        eventData = { status: 'Correct', matchUserId: matchUserId, val: val, coordinate: cod };
+        gameInfos[rmid]['logs'].push(eventData);
+    }
+    else {
+        console.log('不正解');
+        //不正解の場合減点
+        gameInfos[rmid]['points'][matchUserId] -= parseInt(val);
+        eventData = { status: 'InCorrect', matchUserId: matchUserId, val: val, coordinate: cod };
+        gameInfos[rmid]['logs'].push(eventData);
+        io.to(rmid).emit('event', eventData);
+    }
+    io.to(rmid).emit('event', eventData);
+    emitStateAllRoomMember(rmid, io);
+    // 終了検知
+    let endgame = true;
+    Object.keys(gameInfos[rmid]['board']).forEach(key => {
+        if (gameInfos[rmid]['board'][key]['val'] === '-') {
+            endgame = false;
+        } //nagai foreachを途中でやめることはできないらしい……無駄すぎるがとりあえず
+    });
+    return endgame;
+}
+/** returnStateを対象のroom全員にbroadcastする。(他のユーザーが知ってはいけないデータをそれぞれに配りたいので、個別にデータを生成) */
+function emitStateAllRoomMember(rmid, io) {
+    const rclients = io.sockets.adapter.rooms.get(rmid);
+    rclients?.forEach(cl => {
+        const sk = io.sockets.sockets.get(cl);
+        if (sk?.data.matchUserId) {
+            const returnState = { board: gameInfos[rmid]['board'], points: gameInfos[rmid]['points'], highOrLowHistory: gameInfos[rmid].users[sk.data.matchUserId].highOrLowHistory, remainingHighOrLowCount: gameInfos[rmid].users[sk.data.matchUserId].remainingHighOrLowCount };
+            sk.emit('state', returnState);
+        }
+    });
 }
 //# sourceMappingURL=index.js.map

@@ -247,15 +247,6 @@ document.getElementById("highLowButton").addEventListener("click", function (e) 
         socketio.emit('submitExt', submitExtInfo);
     }
 });
-//その他(今はHighOrLowのみ)
-socketio.on('ext', function (data) {
-    //const returnData = { status: 'CheckHighOrLow' as Status, matchUserId: matchUserId, coordinate: cod, highOrLow: highOrLow, remainingHighOrLowCount: gameInfos[rmid].users[matchUserId].remainingHighOrLowCount };
-    console.log('nagai 確認', data);
-    document.querySelector('#highLowButton .badge').textContent = data['remainingHighOrLowCount'];
-    if (document.getElementById(data['coordinate']).textContent === '-') {
-        document.getElementById(data['coordinate']).textContent = data['highOrLow'];
-    }
-});
 
 //どこを選択しているか表示用
 socketio.on('opponentSelect', function (data) {
@@ -332,15 +323,26 @@ socketio.on('event', function (eventData) {
 socketio.on('state', function (data) {
     state = data;
 
-    let bData = state['board'];
-    let points = state['points'];
+    const bData = state['board'];
+    const points = state['points'];
+
+    if (state['highOrLowHistory']) {
+        const highOrLowHistory = state['highOrLowHistory'];
+        highOrLowHistory.forEach(hol => {
+            if (bData[hol.coordinate].val === '-') {
+                bData[hol.coordinate].val = hol.highOrLow;
+            }
+        });
+        document.querySelector('#highLowButton .badge').textContent = data['remainingHighOrLowCount'];
+    }
+
     let endgame = true;
 
     for (let i = 0; i < 9; i++) {
         for (let j = 0; j < 9; j++) {
             const bkey = String(i) + String(j);
             //値に変更があった場合、値をセットする
-            if (document.getElementById(bkey).textContent != bData[bkey].val && bData[bkey].val !== '-') {//変更後の値が-のときは別に良い（これはHかLのときに-で上書き防止）
+            if (document.getElementById(bkey).textContent !== bData[bkey].val) {
                 document.getElementById(bkey).textContent = bData[bkey].val;
                 if (bData[bkey].id === pubUserId || bData[bkey].id === subUserId) {
                     //classをつける
@@ -522,7 +524,7 @@ function sudokuClick(e) {
     socketio.emit("myselect", e.target.id);
 }
 
-/** 数字選択のマスを押した時の処理 */ 
+/** 数字選択のマスを押した時の処理 */
 function selectClick(e) {
     console.log('nagai select click');
     if (singlePlayFlag) {
