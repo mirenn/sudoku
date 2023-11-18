@@ -1,3 +1,7 @@
+// Import our custom CSS
+import '../scss/styles.scss'
+
+
 /**
 * 他人にばれてはいけないユーザーID
 * pubUserIDのログインパスワードのようなもの
