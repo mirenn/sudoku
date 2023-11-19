@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-
 // Import our custom CSS
 //import { emitKeypressEvents } from 'readline';
 import './scss/styles.scss';
-import {socketio} from './socket';
+import { socketio } from './socket';
+import { useEffect, useState } from "react";
 
 /**
 * 他人にばれてはいけないユーザーID
@@ -34,22 +34,22 @@ const subUserId = self.crypto.randomUUID();
 //部屋ID //途中で切断しても戻れるように
 let roomId = localStorage.getItem('roomId');
 
-const input = <HTMLInputElement>document.getElementById('nick');
+const input = document.getElementById('nick') as HTMLInputElement;
 const ncname = localStorage.getItem('name');
 if (ncname) {
     input.value = ncname;
 }
 input.addEventListener('input', (event) => {
-    localStorage.setItem('name', (<HTMLInputElement>event.target).value);
+    localStorage.setItem('name', (event.target as HTMLInputElement).value);
 });
 const INFINITROOM = 'InfiniteRoom';
 
-let ranking;
+//let ranking;
 
 /*state情報を一応持つ。
 ただし、保存した盤面情報を別のところで用いることはしていない
 */
-let state = null;
+let state;
 
 /**
  * simplemodeでは、0でないと数独の答え提出処理は走らない 
@@ -134,40 +134,94 @@ socketio.on('connectnum', function (num) {
 });
 
 socketio.emit('requestranking');
-socketio.on('ranking', function (data) {
-    ranking = data;
-    console.log('nagai ranking', ranking);
-    ranking.sort((a, b) => b.rate - a.rate);
 
-    const rankingTable = document.getElementById('ranking');
-    const mytbody = document.createElement("tbody");
-    ranking.forEach(({ name, rate, id }, index) => {
-        const mytr = document.createElement("tr");
-        const myth = document.createElement("th");
-        const mytd1 = document.createElement("td");
-        const mytd2 = document.createElement("td");
-        const mytd3 = document.createElement("td");
-
-        const rank = getRank(rate);
-        myth.textContent = String(index) + 1;
-        mytd1.textContent = (id === pubUserId) ? name + '（あなた）' : name;
-        mytd2.textContent = String(rate);
-        mytd3.textContent = rank;
-
-        mytr.appendChild(myth);
-        mytr.appendChild(mytd1);
-        mytr.appendChild(mytd2);
-        mytr.appendChild(mytd3);
-        mytbody.appendChild(mytr);
-    });
-    if (rankingTable !== null) {
-        const oldtbody = rankingTable.getElementsByTagName("tbody")[0];
-        if (oldtbody) {
-            rankingTable.removeChild(oldtbody);
+export function Ranking() {
+    const [rdata, setRdata] = useState([]);
+    useEffect(() => {
+        function onRankingEvent(rankingData) {
+            console.log('nagai ranking', rankingData);
+            rankingData.sort((a, b) => b.rate - a.rate);
+            setRdata(rankingData);
         }
-        rankingTable.appendChild(mytbody);
-    }
-});
+        socketio.on('ranking', onRankingEvent);
+
+        return () => {
+            socketio.off('ranking', onRankingEvent);
+        };
+    }, [rdata]);
+
+    const list: JSX.Element[] = [];
+    rdata.forEach(({ name, rate, id }, index) => {
+        const rank = getRank(rate);
+        const ranknum = String(index) + 1;
+        const dispname = (id === pubUserId) ? name + '（あなた）' : name;
+
+        list.push(
+            <tr>
+                <th>{ranknum}</th>
+                <td>{dispname}</td>
+                <td>{rate}</td>
+                <td>{rank}</td>
+            </tr>
+        );
+    });
+
+
+    return (
+        <div className="row d-flex justify-content-center">
+            <div className="col-md-6">
+                <div className="form-group">
+                    <table id="ranking" className="table table-bordered caption-top table-hover ">
+                        <caption>ranking</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">#</th>
+                                <th scope="col">name</th>
+                                <th scope="col">rate</th>
+                                <th scope="col">rank</th>
+                            </tr>
+                            {list}
+                        </thead>
+                    </table>
+                </div>
+            </div>
+        </div>);
+}
+
+// socketio.on('ranking', function (data) {
+//     ranking = data;
+//     console.log('nagai ranking', ranking);
+//     ranking.sort((a, b) => b.rate - a.rate);
+
+//     const rankingTable = document.getElementById('ranking');
+//     const mytbody = document.createElement("tbody");
+//     ranking.forEach(({ name, rate, id }, index) => {
+//         const mytr = document.createElement("tr");
+//         const myth = document.createElement("th");
+//         const mytd1 = document.createElement("td");
+//         const mytd2 = document.createElement("td");
+//         const mytd3 = document.createElement("td");
+
+//         const rank = getRank(rate);
+//         myth.textContent = String(index) + 1;
+//         mytd1.textContent = (id === pubUserId) ? name + '（あなた）' : name;
+//         mytd2.textContent = String(rate);
+//         mytd3.textContent = rank;
+
+//         mytr.appendChild(myth);
+//         mytr.appendChild(mytd1);
+//         mytr.appendChild(mytd2);
+//         mytr.appendChild(mytd3);
+//         mytbody.appendChild(mytr);
+//     });
+//     if (rankingTable !== null) {
+//         const oldtbody = rankingTable.getElementsByTagName("tbody")[0];
+//         if (oldtbody) {
+//             rankingTable.removeChild(oldtbody);
+//         }
+//         rankingTable.appendChild(mytbody);
+//     }
+// });
 
 function getRank(rate: number) {
     if (rate < 1500) {
@@ -220,12 +274,12 @@ socketio.on('match', function (rid) {
     document.getElementById('waiting_disp')?.classList.add('d-none');//対戦待ち接続中
     document.getElementById('waiting_num')?.classList.add('d-none');//現在の総接続人数
     //チャットクリア
-    const charea = <HTMLInputElement>document.getElementById("chatarea");
+    const charea = document.getElementById("chatarea") as HTMLInputElement;
     if (charea !== null) {
         charea.value = '';
     }
     //HighOrLow初期値リセット（本当はサーバーから取ってきた値を入れるのだが面倒なので）
-    const element = <HTMLInputElement>document.querySelector('#highLowButton .badge');
+    const element = document.querySelector('#highLowButton .badge') as HTMLInputElement;
     if (element !== null) {
         element.textContent = '4';
     }
@@ -264,13 +318,13 @@ socketio.on('startCountDown', function (num) {
 //     return false;
 // });
 document.getElementById('message_form')?.addEventListener("click", function () {
-    const element = <HTMLInputElement>document.getElementById('input_msg');
+    const element = document.getElementById('input_msg') as HTMLInputElement;
     socketio.emit('message', element.value);
 });
 
 //チャットメッセージ機能用
 socketio.on('message', function (msg) {
-    const charea = <HTMLInputElement>document.getElementById('chatarea');
+    const charea = document.getElementById('chatarea') as HTMLInputElement;
     charea.value += msg + "\n";
     charea.scrollTop = charea.scrollHeight;
 });
@@ -325,7 +379,7 @@ socketio.on('event', function (eventData) {
         const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
         const nyuuryoku = eventData.val;
         const log = '自動展開' + ':' + zahyo + '：' + nyuuryoku;
-        const txarea = <HTMLInputElement>document.getElementById('log');
+        const txarea = document.getElementById('log') as HTMLInputElement;
         if (txarea !== null) {
             txarea.value += log + "\n";
             txarea.scrollTop = txarea.scrollHeight;
@@ -351,7 +405,7 @@ socketio.on('event', function (eventData) {
         const seigo = eventData.status === 'Correct' ? '正解' : '不正解';
         const nyuuryoku = eventData.val;
         const log = seigo + ':' + who + ' ' + zahyo + '：' + nyuuryoku;
-        const txarea = <HTMLInputElement>document.getElementById('log');
+        const txarea = document.getElementById('log') as HTMLInputElement;
         if (txarea !== null) {
             txarea.value += log + "\n";
             txarea.scrollTop = txarea.scrollHeight;
@@ -361,7 +415,7 @@ socketio.on('event', function (eventData) {
         const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
         const type = 'HighOrLow'
         const log = type + ':' + who + ' ' + zahyo;
-        const txarea = <HTMLInputElement>document.getElementById('log');
+        const txarea = document.getElementById('log') as HTMLInputElement;
         if (txarea !== null) {
             txarea.value += log + "\n";
             txarea.scrollTop = txarea.scrollHeight;
@@ -563,7 +617,7 @@ function goGameButtonClick() {
     }
     document.getElementById('waiting_disp')?.classList.remove('d-none');
     document.getElementById('name_button')?.classList.add('d-none');
-    const element = <HTMLInputElement>document.getElementById('nick');
+    const element = document.getElementById('nick') as HTMLInputElement;
     if (gameMode === 'SimpleMode') {
         socketio.emit("gogameSimpleMode", { roomId: roomId, passWord: passWord, subUserId: subUserId, pubUserId: pubUserId, name: element?.value });
     } else if (gameMode === 'TurnMode') {
@@ -718,7 +772,7 @@ function scoreProcess(points: any, endgame: any) {
     }
 
     if (endgame) {
-        const txarea = <HTMLInputElement>document.getElementById('log');
+        const txarea = document.getElementById('log') as HTMLInputElement;
         if (txarea !== null) {
             txarea.value += 'ゲーム終了' + "\n";
             txarea.scrollTop = txarea.scrollHeight;

@@ -3,8 +3,6 @@
 
 <head>
   <title>sudoku v0.0.3</title>
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
   <link href='https://fonts.googleapis.com/css?family=Roboto:900,400' rel='stylesheet' type='text/css'>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -164,6 +162,7 @@
           <td id="9" class="numbutton">9</td>
         </table>
       </div>
+      <div id="dashboard_kari" class="card col-md-3 mb-4 box-shadow d-none"></div>
       <div id="dashboard" class="card col-md-3 mb-4 box-shadow d-none">
         <div class="card-body">
           <div id="scoreboard" class="mb-4">
@@ -187,25 +186,10 @@
         </div>
       </div>
     </div>
-    <div class="row d-flex justify-content-center">
-      <div class="col-md-6">
-        <div class="form-group">
-          <table id="ranking" class="table table-bordered caption-top table-hover ">
-            <caption>ranking</caption>
-            <thead>
-              <tr>
-                <th scope="col">#</th>
-                <th scope="col">name</th>
-                <th scope="col">rate</th>
-                <th scope="col">rank</th>
-              </tr>
-            </thead>
-          </table>
-        </div>
-      </div>
-    </div>
+    <div id="ranking"></div>
   </main>
-  <script type="module" src="./src/main.ts"></script>
+  <script type="module" src="./src/index.tsx"></script>
+  <!--script type="module" src="./src/main.ts"></script-->
 </body>
 
 </html>
