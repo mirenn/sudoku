@@ -148,7 +148,7 @@ export function Ranking() {
         return () => {
             socketio.off('ranking', onRankingEvent);
         };
-    }, [rdata]);
+    }, []);
 
     const list: JSX.Element[] = [];
     rdata.forEach(({ name, rate, id }, index) => {
