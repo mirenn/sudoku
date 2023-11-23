@@ -1,16 +1,16 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import {Ranking} from "./main"
+import {Ranking, Main} from "./main"
 
-// const dashboard = document.getElementById("dashboard_kari");
-// if (dashboard !== null) {
-//     const root = createRoot(dashboard);
-//     root.render(
-//         <StrictMode>
-//             <DashBoard />
-//         </StrictMode>
-//     );
-// }
+const dashboard = document.getElementById("main");
+if (dashboard !== null) {
+    const root = createRoot(dashboard);
+    root.render(
+        <StrictMode>
+            <Main />
+        </StrictMode>
+    );
+}
 
 const ranking = document.getElementById("ranking");
 if (ranking !== null) {

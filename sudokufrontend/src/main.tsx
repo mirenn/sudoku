@@ -62,9 +62,6 @@ let startCountDown = 0;
  */
 let gameMode = '';
 
-//空の数独マスにイベント追加
-renderEmptyBoard();
-
 /**
  * 一人用ゲームフラグ
  * Trueの場合、一人用数独を遊ぶ
@@ -76,6 +73,7 @@ console.log('nagai singleplaystate', singlePlayState);
 if (singlePlayState.board !== undefined) {//保存されているものがあるのならそれを使用する
     //盤面終了していないか確認
     let singleEndGame = true;
+    singlePlayState = makeNewPlayState(singlePlayState);//データ移行期間中はここにこの値まだちゃんとセットされていないため
     Object.keys(singlePlayState['board']).forEach(key => {
         if (singlePlayState['board'][key]['val'] === '-') {
             singleEndGame = false;
@@ -83,57 +81,221 @@ if (singlePlayState.board !== undefined) {//保存されているものがある
     });
     if (singleEndGame) {
         socketio.emit('requestsingleplay');
-    } else {
-        for (let i = 0; i < 9; i++) {
-            for (let j = 0; j < 9; j++) {
-                const bkey = String(i) + String(j);
-                const element = document.getElementById(bkey);
-                if (element !== null) {
-                    element.textContent = singlePlayState['board'][bkey].val;
-                } else {
-                    // nullの場合の処理
-                }
-            }
-        }
     }
 } else {
-    for (let i = 0; i < 9; i++) {
-        socketio.emit('requestsingleplay');
-    }
+    socketio.emit('requestsingleplay');
 }
-//一人用のゲーム盤面要求
-socketio.on('singleplay', function (data) {
-    console.log('nagai 一人用の場合のデータ', data);
-    singlePlayState = data;
-    localStorage.setItem('singlePlayState', JSON.stringify(singlePlayState));
 
-    if (singlePlayFlag) {
-        for (let i = 0; i < 9; i++) {
-            for (let j = 0; j < 9; j++) {
-                const bkey = String(i) + String(j);
-                const element = document.getElementById(bkey);
-                if (element !== null) {
-                    element.textContent = singlePlayState['board'][bkey].val;
-                } else {
-                    // nullの場合の処理
-                }
+export function Main() {
+    const [playState, setPlayState] = useState(singlePlayState);
+    const [waitingNumText, setWaitingNumText] = useState("");
+    const [dashboardDnone, setDashBoardDnone] = useState(true);
+    const [disp2Dnone, setDisp2Dnone] = useState(true);
+    const [waitingDispDnone, setWaitingDispDnone] = useState(true);
+    const [waitingNumDnone, setWaitingNumDnone] = useState(false);
+    const [texAreaText, setTexAreaText] = useState("");
+    const [highLowNum, setHighLowNum] = useState(4);
+    const [disp2TextContent, setDisp2TextContent] = useState("");
+    const [selectNumGlayOut, setSelectNumGlayOut] = useState(false);
+
+    useEffect(() => {
+        function SinglePlay(data) {
+            singlePlayState = makeNewPlayState(data);
+            console.log('nagai 一人用の場合のデータ', singlePlayState);
+            localStorage.setItem('singlePlayState', JSON.stringify(singlePlayState));
+
+            if (singlePlayFlag) {
+                setPlayState(singlePlayState);
             }
         }
-    }
-});
+        //一人用のゲーム盤面要求
+        socketio.on('singleplay', SinglePlay);
 
-//接続したらとりあえず状態を取る
-socketio.on('connectnum', function (num) {
-    console.log('nagai num', num);
-    const element = document.getElementById('waiting_num');
-    if (element !== null) {
-        element.textContent = '現在の総接続人数' + num;
-    } else {
-        // nullの場合の処理
-    }
-});
+        function ConnectNum(num) {
+            console.log('nagai num', num);
+            setWaitingNumText('現在の総接続人数' + num);
+        }
+        //接続したらとりあえず状態を取る
+        socketio.on('connectnum', ConnectNum);
 
-socketio.emit('requestranking');
+        function Match(rid) {
+            singlePlayFlag = false;
+            state = null;//初期化
+            /////色をつけるクラスはずして初期化
+            removeClass(playState, setPlayState);
+
+            if (gameMode !== 'InfiniteMode') {
+                roomId = rid;
+                localStorage.setItem('roomId', roomId ? roomId : "");
+                //表示
+                setDashBoardDnone(false);
+                setDisp2Dnone(false);
+            } else {
+                roomId = INFINITROOM;
+                localStorage.setItem('roomId', roomId);
+                //表示
+                setDisp2Dnone(false);
+            }
+            //非表示
+            setWaitingDispDnone(true);//対戦待ち接続中
+            setWaitingNumDnone(true);//現在の総接続人数
+            //チャットクリア
+            setTexAreaText("");
+
+            //HighOrLow初期値リセット（本当はサーバーから取ってきた値を入れるのだが面倒なので）
+            setHighLowNum(4);
+        }
+        //マッチしたとき
+        socketio.on('match', Match);
+        function StartCountDown(num) {
+            startCountDown = num;
+            setDisp2TextContent('マッチしました。あと' + String(num) + '秒で開始します。');
+
+            if (num < 1 && gameMode !== 'TurnMode') {
+                setDisp2TextContent('Start');
+                setSelectNumGlayOut(false);
+            } else {
+                //TurnModeではカウントダウン中ずっとグレイアウト
+                setSelectNumGlayOut(true);
+            }
+        }
+        //マッチ後のカウントダウン
+        socketio.on('startCountDown', StartCountDown);
+
+        function Message(msg) {
+            //nagai書きかけ
+            const charea = document.getElementById('chatarea') as HTMLInputElement;
+            charea.value += msg + "\n";
+            charea.scrollTop = charea.scrollHeight;
+        }
+        //チャットメッセージ機能用
+        socketio.on('message', Message);
+
+        return () => {
+            socketio.off('singleplay', SinglePlay);
+            socketio.off('connectnum', ConnectNum);
+            socketio.off('match', Match);
+            socketio.off('startCountDown', StartCountDown);
+            socketio.off("message", Message);
+
+        };
+    }, []);
+    return (
+        <>
+            <h1 id="midasi">Sudoku Online</h1>
+            <span id="waiting_num" className={"d-flex justify-content-center" + (waitingNumDnone ? " d-none" : "")}>{waitingNumText}</span>
+            <div id="waiting_disp" className={"d-flex justify-content-center" + (waitingDispDnone ? " d-none" : "")}>
+                <span id="waiting">対戦待ち接続中</span>
+                <div className="loader"></div>
+            </div>
+            <span id="disp2" className={"d-flex justify-content-center mb-2" + (disp2Dnone ? " d-none" : "")}>{disp2TextContent}</span>
+            <div id="name_button" className="d-flex justify-content-center align-items-center mb-1">
+                <div className="form-group">
+                    <input type="text" className="form-control" id="nick" placeholder="Nickname" maxLength={24}></input>
+                </div>
+                <div className="d-flex mx-3">
+                    <button id="go_game" className="btn btn-primary rounded-pill" type="button">Play Online</button>
+                </div>
+                <div className="form-check">
+                    <label className="form-check-label" htmlFor="SimpleMode">
+                        Simple
+                        <input className="form-check-input" type="radio" value="SimpleMode" name="modeRadio" id="SimpleMode" checked>
+                        </input>
+                    </label>
+                </div>
+                <div className="form-check">
+                    <label className="form-check-label" htmlFor="TurnMode">
+                        Turn
+                        <input className="form-check-input" type="radio" value="TurnMode" name="modeRadio" id="TurnMode"></input>
+                    </label>
+                </div>
+                <div className="form-check">
+                    <label className="form-check-label" htmlFor="InfiniteMode">
+                        Infinite
+                        <input className="form-check-input" type="radio" value="InfiniteMode" name="modeRadio" id="InfiniteMode"></input>
+                    </label>
+                </div>
+            </div>
+            <div className="row d-flex justify-content-center">
+                <div className="col-md-6 mb-4" style={{ position: "relative" }}>
+                    <SudokuTable playState={playState}></SudokuTable>
+                    <table className="select">
+                        <SelectNumButton id="1" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                        <SelectNumButton id="2" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                        <SelectNumButton id="3" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                        <SelectNumButton id="4" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                        <SelectNumButton id="5" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                        <SelectNumButton id="6" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                        <SelectNumButton id="7" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                        <SelectNumButton id="8" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                        <SelectNumButton id="9" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                    </table>
+                </div>
+                <div id="dashboard" className={"card col-md-3 mb-4 box-shadow" + (dashboardDnone ? " d-none" : "")}>
+                    <div className="card-body">
+                        <div id="scoreboard" className="mb-4">
+                            <div><span style={{ color: "#a3ffa3" }}>■</span>自分:
+                                <span id="point_1"></span>
+                            </div>
+                            <div><span style={{ color: "#f5d1fb" }}>■</span>相手:
+                                <span id="point_2"></span>
+                            </div>
+                        </div>
+                        <textarea value={texAreaText} className="form-control mb-2" placeholder="log" id="log" readOnly></textarea>
+                        <div id="chat" className="mb-4">
+                            <textarea className="form-control" placeholder="chat" id="chatarea" readOnly></textarea>
+                            <form id="message_form" action="#" onChange={() => {
+                                const element = document.getElementById('input_msg') as HTMLInputElement;
+                                socketio.emit('message', element.value);
+                            }}>
+                                <input id="input_msg" placeholder="message" className="form-control mb-2" autoComplete="off" />
+                                <button className="btn btn-primary" data-bs-toggle="tooltip" title="send message">Send</button>
+                            </form>
+                        </div>
+                        <button id="highLowButton" className="btn btn-primary" data-bs-toggle="tooltip" title="≥5 or <5">H or L<span className="badge bg-secondary">{highLowNum}</span></button>
+                    </div>
+                </div>
+            </div>
+            <Ranking></Ranking>
+        </>
+    );
+}
+function SelectNumButton({ id, selectNumGlayOut, playState, setPlayState }) {
+    return (
+        <td id={id} className={"numbutton" + (selectNumGlayOut ? " glayout" : "")} onClick={() => handleSelectNumClick(id, playState, setPlayState)}>{id}</td>
+    );
+}
+function SudokuTable({ playState }) {
+    const [myClickId, setMyClickId] = useState(false);
+    const tableList: JSX.Element[] = [];
+    for (let row = 0; row < 9; row++) {
+        const rowList: JSX.Element[] = [];
+        for (let col = 0; col < 9; col++) {
+            const key = row.toString() + col.toString();
+            rowList.push(<SudokuTd id={key} key={key} myClickId={myClickId} setMyClickId={setMyClickId} playState={playState}></SudokuTd>)
+        }
+        tableList.push(<tr>{rowList}</tr>);
+    }
+    return (
+        <table id="sudoku" className="sudoku">
+            {tableList}
+        </table>
+    );
+}
+
+function SudokuTd({ id, playState, myClickId, setMyClickId }) {
+    return (
+        <td id={id} className={"clickenable" + (myClickId === id ? " myClick" : "")
+            + (playState['board'][id]['showCross'] ? " cross" : "")}
+            onMouseEnter={() => {
+                socketio.emit("hover", { id: id });
+            }}
+            onMouseLeave={() => { socketio.emit('hover', { id: '' }) }}
+            onClick={() => {
+                sudokuClick(id, id === myClickId, setMyClickId);
+            }} >{playState['board'][id]['val']}</td>
+    );
+}
 
 export function Ranking() {
     const [rdata, setRdata] = useState([]);
@@ -166,7 +328,6 @@ export function Ranking() {
         );
     });
 
-
     return (
         <div className="row d-flex justify-content-center">
             <div className="col-md-6">
@@ -188,40 +349,7 @@ export function Ranking() {
         </div>);
 }
 
-// socketio.on('ranking', function (data) {
-//     ranking = data;
-//     console.log('nagai ranking', ranking);
-//     ranking.sort((a, b) => b.rate - a.rate);
-
-//     const rankingTable = document.getElementById('ranking');
-//     const mytbody = document.createElement("tbody");
-//     ranking.forEach(({ name, rate, id }, index) => {
-//         const mytr = document.createElement("tr");
-//         const myth = document.createElement("th");
-//         const mytd1 = document.createElement("td");
-//         const mytd2 = document.createElement("td");
-//         const mytd3 = document.createElement("td");
-
-//         const rank = getRank(rate);
-//         myth.textContent = String(index) + 1;
-//         mytd1.textContent = (id === pubUserId) ? name + '（あなた）' : name;
-//         mytd2.textContent = String(rate);
-//         mytd3.textContent = rank;
-
-//         mytr.appendChild(myth);
-//         mytr.appendChild(mytd1);
-//         mytr.appendChild(mytd2);
-//         mytr.appendChild(mytd3);
-//         mytbody.appendChild(mytr);
-//     });
-//     if (rankingTable !== null) {
-//         const oldtbody = rankingTable.getElementsByTagName("tbody")[0];
-//         if (oldtbody) {
-//             rankingTable.removeChild(oldtbody);
-//         }
-//         rankingTable.appendChild(mytbody);
-//     }
-// });
+socketio.emit('requestranking');
 
 function getRank(rate: number) {
     if (rate < 1500) {
@@ -250,84 +378,6 @@ function getRank(rate: number) {
     }
 }
 
-//マッチしたとき
-socketio.on('match', function (rid) {
-    singlePlayFlag = false;
-    state = null;//初期化
-    /////色をつけるクラスはずして初期化
-    removeClass();
-
-    if (gameMode !== 'InfiniteMode') {
-        roomId = rid;
-        localStorage.setItem('roomId', roomId);
-        //表示
-        document.getElementById('dashboard')?.classList.remove('d-none');
-        document.getElementById('disp2')?.classList.remove('d-none');
-    } else {
-        roomId = INFINITROOM;
-        localStorage.setItem('roomId', roomId);
-        //表示
-        //document.getElementById('dashboard').classList.remove('d-none');
-        document.getElementById('disp2')?.classList.remove('d-none');
-    }
-    //非表示
-    document.getElementById('waiting_disp')?.classList.add('d-none');//対戦待ち接続中
-    document.getElementById('waiting_num')?.classList.add('d-none');//現在の総接続人数
-    //チャットクリア
-    const charea = document.getElementById("chatarea") as HTMLInputElement;
-    if (charea !== null) {
-        charea.value = '';
-    }
-    //HighOrLow初期値リセット（本当はサーバーから取ってきた値を入れるのだが面倒なので）
-    const element = document.querySelector('#highLowButton .badge') as HTMLInputElement;
-    if (element !== null) {
-        element.textContent = '4';
-    }
-
-});
-//マッチ後のカウントダウン
-socketio.on('startCountDown', function (num) {
-    startCountDown = num;
-    //$('#disp2').text('マッチしました。あと' + String(num) + '秒で開始します。');
-    const element = document.getElementById('disp2');
-    if (element !== null) {
-        element.textContent = 'マッチしました。あと' + String(num) + '秒で開始します。';
-    }
-
-    if (num < 1 && gameMode !== 'TurnMode') {
-        //$('#disp2').text('Start');
-        if (element !== null) {
-            element.textContent = 'Start';
-        }
-        const elements = document.getElementsByClassName('numbutton');
-        for (let i = 0; i < elements.length; i++) {
-            elements[i].classList.remove("glayout");
-        }
-    } else {
-        //TurnModeではカウントダウン中ずっとグレイアウト
-        const elements = document.getElementsByClassName('numbutton');
-        for (let i = 0; i < elements.length; i++) {
-            elements[i].classList.add("glayout");
-        }
-    }
-});
-//チャット送信
-// $('#message_form').submit(function () {
-//     socketio.emit('message', $('#input_msg').val());
-//     $('#input_msg').val('');
-//     return false;
-// });
-document.getElementById('message_form')?.addEventListener("click", function () {
-    const element = document.getElementById('input_msg') as HTMLInputElement;
-    socketio.emit('message', element.value);
-});
-
-//チャットメッセージ機能用
-socketio.on('message', function (msg) {
-    const charea = document.getElementById('chatarea') as HTMLInputElement;
-    charea.value += msg + "\n";
-    charea.scrollTop = charea.scrollHeight;
-});
 
 document.getElementById("highLowButton")?.addEventListener("click", function () {
     if (startCountDown > 0) return;//カウントダウン中に押しても棄却
@@ -571,37 +621,6 @@ socketio.on('connect_error', (error) => {
     }
 });
 
-// クリックされた要素を保持
-let place: any;
-
-// 空の数独魔法陣作成など
-function renderEmptyBoard() {
-    console.log('renderemptyboard');
-
-    const tds = document.querySelectorAll('#sudoku tr td');
-    tds.forEach(td => {
-        td.addEventListener('mouseover', (e: any) => {
-            if (e.target !== null && e.target.id !== null) {
-                socketio.emit("hover", { id: e.target.id });
-            }
-        });
-        td.addEventListener("click", (e) => {
-            sudokuClick(e);
-        }, false);
-    });
-    const element = document.querySelector('#sudoku');
-    element?.addEventListener('mouseleave', function () {
-        socketio.emit('hover', { id: '' });
-    });
-
-    for (let i = 1; i < 10; i++) {
-        const td = document.getElementById(String(i));
-        if (td !== null) {
-            td.onclick = selectClick;
-        }
-    }
-}
-
 //ゲーム開始、待機画面に遷移
 const button = document.getElementById('go_game');
 if (button !== null) {
@@ -628,76 +647,50 @@ function goGameButtonClick() {
 }
 
 /**
- * 問題パネルのマスが押された時の処理 myClickクラスを一か所につける ただし、つけているところをクリックしたら消せる
- * @param {*} e 
+ * 問題パネルのマスが押された時の処理 myClickクラスを一か所につける ただし、つけているところをクリックしたら消せる 
  * @returns 
  */
-function sudokuClick(e: any) {
-    let onazi = false;
-    if (e.target.classList.contains('myClick')) {
-        //前回押したところが今回押したところと同じならば(今回押したところをすでにクリックしていたなら)
-        onazi = true;
+function sudokuClick(id, idonazi, setMyClickId) {
+    if (idonazi) {
+        setMyClickId('');
+    } else {
+        setMyClickId(id);
     }
-
-    if (place != undefined) {//前のmyClickクラスを消す
-        place.classList.remove('myClick');
-    }
-
-    if (onazi) {
-        socketio.emit("myselect", '');//座標取り消し
-        return;
-    }
-
-    place = e.target;
-    place.classList.add('myClick');
-    socketio.emit("myselect", e.target.id);
+    socketio.emit("myselect", id);
 }
 
 /** 数字選択のマスを押した時の処理 */
-function selectClick(e: any) {
+function handleSelectNumClick(clickNum, playState, setPlayState) {
     console.log('nagai select click');
     if (singlePlayFlag) {
-        const element = document.getElementsByClassName("myClick")[0];
-        if (document.getElementsByClassName("myClick")[0] === undefined || element.textContent !== null &&
-            /^[1-9]+$/.test(element.textContent)) { return; }//1~9の数字が既に入っている場合
-        const datas = document.getElementById("sudoku")?.querySelectorAll("tr");
-        //本当は二重ループ回す必要ない
-        if (datas !== undefined) {
-            outer_loop: for (let i = 0; i < datas.length; i++) {
-                for (let j = 0; j < datas[i].querySelectorAll("td").length; j++) {
-                    if (datas[i].querySelectorAll("td")[j].classList.contains("myClick")) {
-                        const id = String(i) + String(j);
-                        if (e.target.textContent === singlePlayState['answer'][i * 9 + j]) {
-                            //正解の場合
-                            const idEle = document.getElementById(id);
-                            if (idEle !== null) {
-                                idEle.textContent = e.target.textContent;
-                            }
-                            singlePlayState['board'][id]['val'] = e.target.textContent;
-                            localStorage.setItem('singlePlayState', JSON.stringify(singlePlayState));
-                        } else {
-                            //不正解の場合
-                            // const image = document.getElementById("closeicon");
-                            // image.style.display = "block";
-                            // setTimeout(function () {
-                            //     image.style.display = "none";
-                            // }, 300);
-                            const idEle = document.getElementById(id);
+        const sudokuTableMyClickTarget = document.getElementsByClassName("myClick");
+        if (sudokuTableMyClickTarget.length === 0) { return; }//数独の盤面で選択対象がない場合
+        const sudokuTableMyClickId = sudokuTableMyClickTarget[0].id;
+        if (!isNaN(playState['board'][sudokuTableMyClickId]['val'])) { return; }//数字が既に入っている場合
+        const row = Number(sudokuTableMyClickId[0]);
+        const col = Number(sudokuTableMyClickId[1]);
 
-                            idEle?.classList.add('cross');
-                            setTimeout(function () {
-                                idEle?.classList.remove('cross');
-                            }, 1000);
-                        }
-                        break outer_loop;
-                    }
-                }
-            }
+        const newPlayState = { ...playState };
+        const answerNum = playState['answer'][row * 9 + col];
+
+        if (clickNum === answerNum) {
+            //正解の場合
+            newPlayState['board'][sudokuTableMyClickId]['val'] = answerNum;
+            setPlayState(newPlayState);
+            localStorage.setItem('singlePlayState', JSON.stringify(newPlayState));
+        } else {
+            //不正解の場合
+            newPlayState['board'][sudokuTableMyClickId]['showCross'] = true;
+            setPlayState(newPlayState);
+            setTimeout(function () {
+                newPlayState['board'][sudokuTableMyClickId]['showCross'] = false;
+                setPlayState(newPlayState);
+            }, 1000);
         }
 
         let singleEndGame = true;
-        Object.keys(singlePlayState['board']).forEach(key => {
-            if (singlePlayState['board'][key]['val'] === '-') {
+        Object.keys(newPlayState['board']).forEach(key => {
+            if (newPlayState['board'][key]['val'] === '-') {
                 singleEndGame = false;
             }
         });
@@ -706,47 +699,47 @@ function selectClick(e: any) {
         }
     } else if (gameMode === 'TurnMode') {
         if (startCountDown > 0) return;//カウントダウン中に押してもすぐ終了
-        const element = document.getElementsByClassName("myClick")[0];
-        if (document.getElementsByClassName("myClick")[0] === undefined || element.textContent !== null && /^[1-9]+$/.test(element.textContent)) { return; }//1-9でないときすぐ終了
+        const sudokuTableMyClickTarget = document.getElementsByClassName("myClick");
+        if (sudokuTableMyClickTarget.length === 0) { return; }//数独の盤面で選択対象がない場合
+        const sudokuTableMyClickId = sudokuTableMyClickTarget[0].id;
+        if (!isNaN(playState['board'][sudokuTableMyClickId]['val'])) { return; }//1~9の数字が既に入っている場合
 
-        if (document.getElementsByClassName('myClick').length > 0) {
-            const submitInfo = {
-                roomId: roomId,
-                coordinate: document.getElementsByClassName('myClick')[0].id,
-                val: e.target.textContent
-            };
-            console.log('nagai submitInfo', submitInfo);
-            socketio.emit('submitTurnMode', submitInfo);
-        }
+        const submitInfo = {
+            roomId: roomId,
+            coordinate: sudokuTableMyClickId,
+            val: clickNum
+        };
+        console.log('nagai submitInfo', submitInfo);
+        socketio.emit('submitTurnMode', submitInfo);
     }
     else if (gameMode === 'SimpleMode') {
         //SinmpleMode
         if (startCountDown > 0) return;//カウントダウン中に押してもすぐ終了
-        const element = document.getElementsByClassName("myClick")[0];
+        const sudokuTableMyClickTarget = document.getElementsByClassName("myClick");
+        if (sudokuTableMyClickTarget.length === 0) { return; }//数独の盤面で選択対象がない場合
+        const sudokuTableMyClickId = sudokuTableMyClickTarget[0].id;
+        if (!isNaN(playState['board'][sudokuTableMyClickId]['val'])) { return; }//1~9の数字が既に入っている場合
 
-        if (document.getElementsByClassName("myClick")[0] === undefined || element.textContent !== null && /^[1-9]+$/.test(element.textContent)) { return; }
-        if (document.getElementsByClassName('myClick').length > 0) {
-            const submitInfo = {
-                roomId: roomId,
-                coordinate: document.getElementsByClassName('myClick')[0].id,
-                val: e.target.textContent
-            };
-            console.log('nagai submitInfo', submitInfo);
-            socketio.emit('submitSimpleMode', submitInfo);
-        }
+        const submitInfo = {
+            roomId: roomId,
+            coordinate: sudokuTableMyClickId,
+            val: clickNum
+        };
+        console.log('nagai submitInfo', submitInfo);
+        socketio.emit('submitSimpleMode', submitInfo);
     } else if (gameMode === 'InfiniteMode') {
-        const element = document.getElementsByClassName("myClick")[0];
+        const sudokuTableMyClickTarget = document.getElementsByClassName("myClick");
+        if (sudokuTableMyClickTarget.length === 0) { return; }//数独の盤面で選択対象がない場合
+        const sudokuTableMyClickId = sudokuTableMyClickTarget[0].id;
+        if (!isNaN(playState['board'][sudokuTableMyClickId]['val'])) { return; }//1~9の数字が既に入っている場合
 
-        if (document.getElementsByClassName("myClick")[0] === undefined || element.textContent !== null && /^[1-9]+$/.test(element.textContent)) { return; }
-        if (document.getElementsByClassName('myClick').length > 0) {
-            const submitInfo = {
-                roomId: roomId,
-                coordinate: document.getElementsByClassName('myClick')[0].id,
-                val: e.target.textContent
-            };
-            console.log('nagai submitInfo', submitInfo);
-            socketio.emit('submitInfiniteMode', submitInfo);
-        }
+        const submitInfo = {
+            roomId: roomId,
+            coordinate: sudokuTableMyClickId,
+            val: clickNum
+        };
+        console.log('nagai submitInfo', submitInfo);
+        socketio.emit('submitInfiniteMode', submitInfo);
     }
 }
 
@@ -798,22 +791,25 @@ function scoreProcess(points: any, endgame: any) {
 }
 
 /**色をつけるクラスはずして初期化 */
-function removeClass() {
-    /////色をつけるクラスはずして初期化
-    const opoele = document.getElementsByClassName('opponent');
-    while (opoele.length) {
-        opoele[0].classList.remove('opponent');
-    }
-    const opohv = document.getElementsByClassName('opohover');
-    while (opohv.length) {
-        opohv[0].classList.remove('opohover');
-    }
-    const ownele = document.getElementsByClassName('own');
-    while (ownele.length) {
-        ownele[0].classList.remove('own');
-    }
-    const opocliele = document.getElementsByClassName('opoClick');
-    while (opocliele.length) {
-        opocliele[0].classList.remove('opoClick');
-    }
+function removeClass(playState, setPlayState) {
+    const newPlayState = makeNewPlayState(playState);
+    setPlayState(newPlayState);
+}
+
+/**
+ * 状態管理に必要なプロパティを追加して生成
+ * @param playState 
+ * @returns 
+ */
+function makeNewPlayState(playState) {
+    const newPlayState = { ...playState };
+
+    Object.keys(newPlayState['board']).forEach(key => {
+        newPlayState['board'][key]['showCross'] = false;
+        newPlayState['board'][key]['opoClick'] = false;
+        newPlayState['board'][key]['opoHover'] = false;
+        newPlayState['board'][key]['own'] = false;
+        newPlayState['board'][key]['opponent'] = false;
+    });
+    return newPlayState;
 }
