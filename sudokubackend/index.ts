@@ -975,7 +975,6 @@ function checkSubimtBoardEmit(submitInfo: SubmitInfo, socket: socketio.Socket, r
         gameInfos[rmid]['points'][matchUserId] -= parseInt(val);
         eventData = { status: 'InCorrect' as Status, matchUserId: matchUserId, val: val, coordinate: cod };
         gameInfos[rmid]['logs'].push(eventData);
-        io.to(rmid).emit('event', eventData);
     }
     io.to(rmid).emit('event', eventData);
     emitStateAllRoomMember(rmid, io);

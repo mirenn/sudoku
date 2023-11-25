@@ -3,7 +3,7 @@
 //import { emitKeypressEvents } from 'readline';
 import './scss/styles.scss';
 import { socketio } from './socket';
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 /**
 * 他人にばれてはいけないユーザーID
@@ -93,10 +93,17 @@ export function Main() {
     const [disp2Dnone, setDisp2Dnone] = useState(true);
     const [waitingDispDnone, setWaitingDispDnone] = useState(true);
     const [waitingNumDnone, setWaitingNumDnone] = useState(false);
-    const [texAreaText, setTexAreaText] = useState("");
+    const [logValue, setLogValue] = useState("");
+    const logRef = useRef<HTMLTextAreaElement>(null);
     const [highLowNum, setHighLowNum] = useState(4);
     const [disp2TextContent, setDisp2TextContent] = useState("");
     const [selectNumGlayOut, setSelectNumGlayOut] = useState(false);
+    const [chatAreaValue, setChatAreaValue] = useState("");
+    const chatAreaRef = useRef<HTMLTextAreaElement>(null);
+    const [point1Text, setPoint1Text] = useState("");
+    const [point2Text, setPoint2Text] = useState("");
+    const [nameButtonDnone, setNameButtonDnone] = useState(false);
+    const [inputMessage, setInputMessage] = useState("");
 
     useEffect(() => {
         function SinglePlay(data) {
@@ -140,7 +147,9 @@ export function Main() {
             setWaitingDispDnone(true);//対戦待ち接続中
             setWaitingNumDnone(true);//現在の総接続人数
             //チャットクリア
-            setTexAreaText("");
+            setChatAreaValue("");
+            //ログクリア
+            setLogValue("");
 
             //HighOrLow初期値リセット（本当はサーバーから取ってきた値を入れるのだが面倒なので）
             setHighLowNum(4);
@@ -163,13 +172,224 @@ export function Main() {
         socketio.on('startCountDown', StartCountDown);
 
         function Message(msg) {
-            //nagai書きかけ
+            console.log(msg);
             const charea = document.getElementById('chatarea') as HTMLInputElement;
-            charea.value += msg + "\n";
+            setChatAreaValue(chatAreaRef.current?.value + msg + "\n");
             charea.scrollTop = charea.scrollHeight;
+            if (chatAreaRef.current) {//nagai書き方あっているか?
+                chatAreaRef.current.scrollTop = charea.scrollHeight;
+            }
         }
         //チャットメッセージ機能用
         socketio.on('message', Message);
+        function OpponentSelect(data) {
+            console.log('nagai opponentSelect', data);
+            //すでにつけている分を消す。(これも自分のクリックした要素をplaceのような変数に持てば良いがとりあえず）
+            const newPlayState = { ...playState };
+            Object.keys(newPlayState['board']).forEach(key => {
+                newPlayState['board'][key]['opoClick'] = false;
+            });
+            newPlayState['board'][data]['opoClick'] = true;
+            setPlayState(newPlayState);
+        }
+        //どこを選択しているか表示用
+        socketio.on('opponentSelect', OpponentSelect);
+
+        function Event(eventData) {
+            console.log('nagai', eventData);
+            const newPlayState = { ...playState };
+
+            if (eventData.status === 'InCorrect') {
+                //不正解だった場合はバツ画像を表示。（なんの数字を入れたかは相手側のはログを見るしか無い……）
+                newPlayState['board'][eventData.coordinate]['showCross'] = true;
+                setPlayState(newPlayState);
+                setTimeout(function () {
+                    newPlayState['board'][eventData.coordinate]['showCross'] = false;
+                    setPlayState(newPlayState);
+                }, 1000);
+            }
+            if (eventData.status === 'auto' && gameMode === 'TurnMode') {//autoがそもそもturnmode限定
+                //今は文字を画面に表示しているだけなので文字列で送ってくるだけで良い……。
+                const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
+                const nyuuryoku = eventData.val;
+                const newLogValue = logValue + '自動展開' + ':' + zahyo + '：' + nyuuryoku + "\n";
+                setLogValue(newLogValue);
+                const txarea = document.getElementById('log') as HTMLInputElement;
+                if (chatAreaRef.current) {
+                    chatAreaRef.current.scrollTop = txarea.scrollHeight;
+                }
+
+                //autoで開かれた箇所の枠線は１秒間枠を太くする
+                newPlayState['board'][eventData.coordinate]['showHutoiBorder'] = true;
+                setPlayState(newPlayState);
+                setTimeout(function () {
+                    newPlayState['board'][eventData.coordinate]['showHutoiBorder'] = false;
+                    setPlayState(newPlayState);
+                }, 1000);
+
+                setDisp2TextContent('自動展開' + ':' + zahyo + '：' + nyuuryoku);
+                return;//autoなら処理ここまで
+            }
+
+            if (eventData.status === 'Correct' || eventData.status === 'InCorrect') {
+                //今は文字を画面に表示しているだけなので文字列で送ってくるだけで良い……。
+                const who = (eventData.matchUserId === pubUserId || eventData.matchUserId === subUserId) ? '自分' : '相手';
+                const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
+                const seigo = eventData.status === 'Correct' ? '正解' : '不正解';
+                const nyuuryoku = eventData.val;
+                const txarea = document.getElementById('log') as HTMLInputElement;
+
+                //nagaiよくわからないが前の値をlogValueから取ることはできない
+                //const newLogValue = logValue + seigo + ':' + who + ' ' + zahyo + '：' + nyuuryoku + "\n"; 
+                const newLogValue = logRef.current?.value + seigo + ':' + who + ' ' + zahyo + '：' + nyuuryoku + "\n";
+                setLogValue(newLogValue);
+                if (logRef.current) {
+                    logRef.current.scrollTop = txarea.scrollHeight;
+                }
+            } else if (eventData.status === 'CheckHighOrLow') {
+                const who = (eventData.matchUserId === pubUserId || eventData.matchUserId === subUserId) ? '自分' : '相手';
+                const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
+                const type = 'HighOrLow'
+                const txarea = document.getElementById('log') as HTMLInputElement;
+                const newLogValue = logRef.current?.value + type + ':' + who + ' ' + zahyo + "\n";
+                setLogValue(newLogValue);
+                if (logRef.current) {
+                    logRef.current.scrollTop = txarea.scrollHeight;
+                }
+            }
+        }
+        /**
+         * {status: string,matchUserId: string,val: string,coordinate: string}
+         */
+        socketio.on('event', Event);
+
+        function State(data) {
+            state = data;
+            const points = state['points'];
+            const newPlayState = { ...playState };
+            let endgame = true;
+
+            Object.keys(newPlayState['board']).forEach(key => {
+                newPlayState['board'][key]['val'] = state['board'][key]['val'];
+                newPlayState['board'][key]['id'] = state['board'][key]['id'];
+                if (newPlayState['board'][key]['id'] === pubUserId || newPlayState['board'][key]['id'] === subUserId) {
+                    //classをつける
+                    newPlayState['board'][key]['own'] = true;
+                } else if (newPlayState['board'][key]['id'] !== 'auto' && newPlayState['board'][key]['id'] !== 'mada') {
+                    newPlayState['board'][key]['opponent'] = true;
+                }
+                if (newPlayState['board'][key]['val'] === '-') {
+                    endgame = false;
+                }
+            });
+
+            if (state['highOrLowHistory']) {
+                const highOrLowHistory = state['highOrLowHistory'];
+                highOrLowHistory.forEach((hol: { coordinate: string | number; highOrLow: any; }) => {
+                    if (newPlayState['board'][hol.coordinate]['val'] === '-') {
+                        newPlayState['board'][hol.coordinate]['val'] = hol.highOrLow;
+                    }
+                });
+                setHighLowNum(data['remainingHighOrLowCount']);
+            }
+
+            setPlayState(newPlayState);
+
+            scoreProcess(points, endgame, logValue, setPoint1Text, setPoint2Text, setLogValue, setDisp2TextContent, setNameButtonDnone);
+        }
+        //全盤面の情報取得
+        //全盤面:どこのマスが誰に開けられているか
+        //プレイヤーの状態:お手付きに入っているかなど(これは後回し)
+        //現在見えている盤面と相違があるデータを取得した瞬間に色をつける
+        //simpleとturn
+        socketio.on('state', State);
+        function StateInfiniteMode(data) {
+            state = data;
+
+            let endgame = true;
+            state = data;
+            const newPlayState = { ...playState };
+
+            Object.keys(newPlayState['board']).forEach(key => {
+                if (state['board'][key]['val'] !== '-') {//変更後の値が-のときは別に良い（これはHかLのときに-で上書き防止）//nagaiいらないかも
+                    newPlayState['board'][key]['val'] = state['board'][key]['val'];
+                }
+                newPlayState['board'][key]['id'] = state['board'][key]['id'];
+                if (newPlayState['board'][key]['id'] === pubUserId || newPlayState['board'][key]['id'] === subUserId) {
+                    //classをつける
+                    newPlayState['board'][key]['own'] = true;
+                } else if (newPlayState['board'][key]['id'] !== 'auto' && newPlayState['board'][key]['id'] !== 'mada') {
+                    newPlayState['board'][key]['opponent'] = true;
+                }
+                if (newPlayState['board'][key]['val'] === '-') {
+                    endgame = false;
+                }
+            });
+            setPlayState(newPlayState);
+
+            if (endgame) {
+                removeClass(setPlayState, setPlayState);
+            }
+        }
+        socketio.on('stateInfiniteMode', StateInfiniteMode);
+        //TurnMode用。ゲーム進行カウントダウン
+        //nagai:ゲーム終了してもカウント進んでいたので修正する
+        function TurnCount(data) {
+            console.log('nagai data', data);
+            if (data.turnUserId === pubUserId || data.turnUserId === subUserId) {
+                setSelectNumGlayOut(false);
+            } else {
+                setSelectNumGlayOut(true);
+            }
+            if (startCountDown > 0) {
+                return;
+            }
+
+            let who;
+            if (data.turnUserId === pubUserId || data.turnUserId === subUserId) {
+                who = '自分のターン';
+            } else if (data.turnUserId === 'auto') {
+                who = 'オート';
+            } else {
+                who = '相手のターン'
+            }
+            const dispmessage = who + '残り秒数' + data.countdown;
+            setDisp2TextContent(dispmessage);
+        }
+        socketio.on("turnCount", TurnCount);
+
+        /** {matchUserIdのuuid : id} */
+        const opoHover: any = {};
+        /** { id: string, matchUserId: string} */
+        function HoverServer(data) {
+            const newPlayState = { ...playState };
+
+            if (gameMode === 'InfiniteMode') {
+                if (data.matchUserId in opoHover) {
+                    newPlayState['board'][opoHover[data.matchUserId]]['opoHover'] = false;
+                }
+                opoHover[data.matchUserId] = data.id;
+                if (data.id !== '') {
+                    newPlayState['board'][data.id]['opoHover'] = true;
+                }
+            } else {
+                Object.keys(newPlayState['board']).forEach(key => {
+                    newPlayState['board'][key]['opoHover'] = false;
+                });
+                if (data.id !== '') {
+                    newPlayState['board'][data.id]['opoHover'] = true;
+                }
+            }
+            setPlayState(newPlayState);
+        }
+        socketio.on("hoverServer", HoverServer);
+
+        function Connect_Error(error) {
+            console.log('nagai error テスト確認', error);
+            setDisp2TextContent('サーバーと通信ができなくなりました');
+        }
+        //接続エラー時のイベント
+        socketio.on('connect_error', Connect_Error);
 
         return () => {
             socketio.off('singleplay', SinglePlay);
@@ -177,7 +397,13 @@ export function Main() {
             socketio.off('match', Match);
             socketio.off('startCountDown', StartCountDown);
             socketio.off("message", Message);
-
+            socketio.off('opponentSelect', OpponentSelect);
+            socketio.off('event', Event);
+            socketio.off('state', State);
+            socketio.off('stateInfiniteMode', StateInfiniteMode);
+            socketio.off("turnCount", TurnCount);
+            socketio.off("hoverServer", HoverServer);
+            socketio.off('connect_error', Connect_Error);
         };
     }, []);
     return (
@@ -189,12 +415,12 @@ export function Main() {
                 <div className="loader"></div>
             </div>
             <span id="disp2" className={"d-flex justify-content-center mb-2" + (disp2Dnone ? " d-none" : "")}>{disp2TextContent}</span>
-            <div id="name_button" className="d-flex justify-content-center align-items-center mb-1">
+            <div id="name_button" className={"d-flex justify-content-center align-items-center mb-1" + (nameButtonDnone ? " d-none" : "")}>
                 <div className="form-group">
                     <input type="text" className="form-control" id="nick" placeholder="Nickname" maxLength={24}></input>
                 </div>
                 <div className="d-flex mx-3">
-                    <button id="go_game" className="btn btn-primary rounded-pill" type="button">Play Online</button>
+                    <button id="go_game" onClick={() => { handleGoGameButtonClick(setWaitingDispDnone, setNameButtonDnone) }} className="btn btn-primary rounded-pill" type="button">Play Online</button>
                 </div>
                 <div className="form-check">
                     <label className="form-check-label" htmlFor="SimpleMode">
@@ -235,24 +461,43 @@ export function Main() {
                     <div className="card-body">
                         <div id="scoreboard" className="mb-4">
                             <div><span style={{ color: "#a3ffa3" }}>■</span>自分:
-                                <span id="point_1"></span>
+                                <span id="point_1">{point1Text}</span>
                             </div>
                             <div><span style={{ color: "#f5d1fb" }}>■</span>相手:
-                                <span id="point_2"></span>
+                                <span id="point_2">{point2Text}</span>
                             </div>
                         </div>
-                        <textarea value={texAreaText} className="form-control mb-2" placeholder="log" id="log" readOnly></textarea>
+                        <textarea value={logValue} ref={logRef} className="form-control mb-2" placeholder="log" id="log" readOnly={true}></textarea>
                         <div id="chat" className="mb-4">
-                            <textarea className="form-control" placeholder="chat" id="chatarea" readOnly></textarea>
-                            <form id="message_form" action="#" onChange={() => {
-                                const element = document.getElementById('input_msg') as HTMLInputElement;
-                                socketio.emit('message', element.value);
-                            }}>
-                                <input id="input_msg" placeholder="message" className="form-control mb-2" autoComplete="off" />
-                                <button className="btn btn-primary" data-bs-toggle="tooltip" title="send message">Send</button>
+                            <textarea className="form-control" ref={chatAreaRef} value={chatAreaValue} placeholder="chat" id="chatarea" readOnly={true}></textarea>
+                            <form id="message_form" action="#" >
+                                <input id="input_msg" placeholder="message" value={inputMessage} onChange={(e) => {
+                                    setInputMessage(e.target.value);
+                                }}  className="form-control mb-2" autoComplete="off" />
+                                <button className="btn btn-primary" type="button" data-bs-toggle="tooltip" title="send message" onClick={() => {
+                                    console.log('nagai onclick button');
+                                    const element = document.getElementById('input_msg') as HTMLInputElement;
+                                    socketio.emit('message', element.value);
+                                    setInputMessage("");//入力フォームを空にする
+                                }}>Send</button>
                             </form>
                         </div>
-                        <button id="highLowButton" className="btn btn-primary" data-bs-toggle="tooltip" title="≥5 or <5">H or L<span className="badge bg-secondary">{highLowNum}</span></button>
+                        <button id="highLowButton" className="btn btn-primary" data-bs-toggle="tooltip" title="≥5 or <5"
+                            onClick={() => {
+                                if (startCountDown > 0) return;//カウントダウン中に押しても棄却
+                                if (document.getElementsByClassName("myClick")[0] === undefined || document.getElementsByClassName("myClick")[0].textContent !== "-") { return; }
+                                const element = document.querySelector('#highLowButton .badge');
+                                if (element !== null && element.textContent !== null && parseInt(element.textContent) < 1) { return; }
+                                if (document.getElementsByClassName('myClick').length > 0) {
+                                    const submitExtInfo = {
+                                        roomId: roomId,
+                                        extType: 'HIGHORLOW',
+                                        coordinate: document.getElementsByClassName('myClick')[0].id,
+                                    };
+                                    console.log('nagai submitExtInfo', submitExtInfo);
+                                    socketio.emit('submitExt', submitExtInfo);
+                                }
+                            }}>H or L<span className="badge bg-secondary">{highLowNum}</span></button>
                     </div>
                 </div>
             </div>
@@ -286,13 +531,18 @@ function SudokuTable({ playState }) {
 function SudokuTd({ id, playState, myClickId, setMyClickId }) {
     return (
         <td id={id} className={"clickenable" + (myClickId === id ? " myClick" : "")
-            + (playState['board'][id]['showCross'] ? " cross" : "")}
+            + (playState['board'][id]['showCross'] ? " cross" : "")
+            + (playState['board'][id]['opoClick'] ? " opoClick" : "")
+            + (playState['board'][id]['opoHover'] ? " opoHover" : "")
+            + (playState['board'][id]['own'] ? " own" : "")
+            + (playState['board'][id]['opponent'] ? " opponent" : "")
+            + (playState['board'][id]['showHutoiBorder'] ? " hutoiborder" : "")}
             onMouseEnter={() => {
                 socketio.emit("hover", { id: id });
             }}
             onMouseLeave={() => { socketio.emit('hover', { id: '' }) }}
             onClick={() => {
-                sudokuClick(id, id === myClickId, setMyClickId);
+                handleSudokuClick(id, id === myClickId, setMyClickId);
             }} >{playState['board'][id]['val']}</td>
     );
 }
@@ -378,255 +628,7 @@ function getRank(rate: number) {
     }
 }
 
-
-document.getElementById("highLowButton")?.addEventListener("click", function () {
-    if (startCountDown > 0) return;//カウントダウン中に押しても棄却
-    if (document.getElementsByClassName("myClick")[0] === undefined || document.getElementsByClassName("myClick")[0].textContent !== "-") { return; }
-    const element = document.querySelector('#highLowButton .badge');
-    if (element !== null && element.textContent !== null && parseInt(element.textContent) < 1) { return; }
-    if (document.getElementsByClassName('myClick').length > 0) {
-        const submitExtInfo = {
-            roomId: roomId,
-            extType: 'HIGHORLOW',
-            coordinate: document.getElementsByClassName('myClick')[0].id,
-        };
-        console.log('nagai submitExtInfo', submitExtInfo);
-        socketio.emit('submitExt', submitExtInfo);
-    }
-});
-
-//どこを選択しているか表示用
-socketio.on('opponentSelect', function (data) {
-    console.log('nagai opponentSelect', data);
-    //すでにつけている分を消す。(これも自分のクリックした要素をplaceのような変数に持てば良いがとりあえず）
-    const elements = document.getElementsByClassName('opoClick');
-    for (let i = 0; i < elements.length; i++) {
-        elements[i].classList.remove('opoClick');
-    }
-    if (data !== '') {
-        document.getElementById(data)?.classList.add('opoClick');
-    }
-});
-/**
- * {status: string,matchUserId: string,val: string,coordinate: string}
- */
-socketio.on('event', function (eventData) {
-    if (eventData.status === 'InCorrect') {
-        //自分が不正解だった場合&& (eventData.matchUserId === pubUserId || eventData.matchUserId === subUserId)
-        // const image = document.getElementById("closeicon");
-        // image.style.display = "block";
-        // setTimeout(function () {
-        //     image.style.display = "none";
-        // }, 300);
-        //不正解だった場合はバツ画像を表示。（なんの数字を入れたかは相手側のはログを見るしか無い……）
-        document.getElementById(eventData.coordinate)?.classList.add('cross');
-        setTimeout(function () {
-            document.getElementById(eventData.coordinate)?.classList.remove('cross');
-        }, 1000);
-    }
-    if (eventData.status === 'auto' && gameMode === 'TurnMode') {//autoがそもそもturnmode限定
-        //今は文字を画面に表示しているだけなので文字列で送ってくるだけで良い……。
-        const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
-        const nyuuryoku = eventData.val;
-        const log = '自動展開' + ':' + zahyo + '：' + nyuuryoku;
-        const txarea = document.getElementById('log') as HTMLInputElement;
-        if (txarea !== null) {
-            txarea.value += log + "\n";
-            txarea.scrollTop = txarea.scrollHeight;
-        }
-
-        //autoで開かれた箇所の枠線は１秒間枠を太くする
-        document.getElementById(eventData.coordinate)?.classList.add('hutoiborder');
-        setTimeout(function () {
-            document.getElementById(eventData.coordinate)?.classList.remove('hutoiborder');
-        }, 1000);
-
-        const disp2ele = document.getElementById('disp2');
-        if (disp2ele !== null) {
-            disp2ele.textContent = '自動展開' + ':' + zahyo + '：' + nyuuryoku;
-        }
-        return;//autoなら処理ここまで
-    }
-
-    if (eventData.status === 'Correct' || eventData.status === 'InCorrect') {
-        //今は文字を画面に表示しているだけなので文字列で送ってくるだけで良い……。
-        const who = (eventData.matchUserId === pubUserId || eventData.matchUserId === subUserId) ? '自分' : '相手';
-        const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
-        const seigo = eventData.status === 'Correct' ? '正解' : '不正解';
-        const nyuuryoku = eventData.val;
-        const log = seigo + ':' + who + ' ' + zahyo + '：' + nyuuryoku;
-        const txarea = document.getElementById('log') as HTMLInputElement;
-        if (txarea !== null) {
-            txarea.value += log + "\n";
-            txarea.scrollTop = txarea.scrollHeight;
-        }
-    } else if (eventData.status === 'CheckHighOrLow') {
-        const who = (eventData.matchUserId === pubUserId || eventData.matchUserId === subUserId) ? '自分' : '相手';
-        const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
-        const type = 'HighOrLow'
-        const log = type + ':' + who + ' ' + zahyo;
-        const txarea = document.getElementById('log') as HTMLInputElement;
-        if (txarea !== null) {
-            txarea.value += log + "\n";
-            txarea.scrollTop = txarea.scrollHeight;
-        }
-    }
-
-});
-//全盤面の情報取得
-//全盤面:どこのマスが誰に開けられているか
-//プレイヤーの状態:お手付きに入っているかなど(これは後回し)
-//現在見えている盤面と相違があるデータを取得した瞬間に色をつける
-//simpleとturn
-socketio.on('state', function (data) {
-    state = data;
-
-    const bData = state['board'];
-    const points = state['points'];
-
-    if (state['highOrLowHistory']) {
-        const highOrLowHistory = state['highOrLowHistory'];
-        highOrLowHistory.forEach((hol: { coordinate: string | number; highOrLow: any; }) => {
-            if (bData[hol.coordinate].val === '-') {
-                bData[hol.coordinate].val = hol.highOrLow;
-            }
-        });
-        const element = document.querySelector('#highLowButton .badge');
-        if (element !== null) {
-            element.textContent = data['remainingHighOrLowCount'];
-        }
-    }
-
-    let endgame = true;
-
-    for (let i = 0; i < 9; i++) {
-        for (let j = 0; j < 9; j++) {
-            const bkey = String(i) + String(j);
-            const element = document.getElementById(bkey);
-            //値に変更があった場合、値をセットする
-            if (element !== null && element.textContent !== bData[bkey].val) {
-                element.textContent = bData[bkey].val;
-                if (bData[bkey].id === pubUserId || bData[bkey].id === subUserId) {
-                    //classをつける
-                    element.classList.add('own');
-                } else if (bData[bkey].id !== 'auto' && bData[bkey].id !== 'mada') {
-                    element.classList.add('opponent');
-                }
-            }
-            if (bData[bkey].val === '-') {
-                endgame = false;
-            }
-        }
-    }
-    scoreProcess(points, endgame);
-});
-
-socketio.on('stateInfiniteMode', function (data) {
-    state = data;
-
-    const bData = state['board'];
-    //const points = state['points'];
-    let endgame = true;
-
-    for (let i = 0; i < 9; i++) {
-        for (let j = 0; j < 9; j++) {
-            const bkey = String(i) + String(j);
-            const element = document.getElementById(bkey);
-            //値に変更があった場合、値をセットする
-            if (element !== null && element.textContent !== bData[bkey].val && bData[bkey].val !== '-') {//変更後の値が-のときは別に良い（これはHかLのときに-で上書き防止）
-                element.textContent = bData[bkey].val;
-                if (bData[bkey].id === pubUserId || bData[bkey].id === subUserId) {
-                    //classをつける
-                    element?.classList.add('own');
-                } else if (bData[bkey].id !== 'auto' && bData[bkey].id !== 'mada') {
-                    element?.classList.add('opponent');
-                }
-            }
-            if (bData[bkey].val === '-') {
-                endgame = false;
-            }
-        }
-    }
-    if (endgame) {
-        removeClass();
-    }
-});
-//TurnMode用。ゲーム進行カウントダウン
-//nagai:ゲーム終了してもカウント進んでいたので修正する
-socketio.on("turnCount", (data) => {
-    console.log('nagai data', data);
-    if (data.turnUserId === pubUserId || data.turnUserId === subUserId) {
-        const elements = document.getElementsByClassName('numbutton');
-        for (let i = 0; i < elements.length; i++) {
-            elements[i].classList.remove("glayout");
-        }
-    } else {
-        const elements = document.getElementsByClassName('numbutton');
-        for (let i = 0; i < elements.length; i++) {
-            elements[i].classList.add("glayout");
-        }
-    }
-    if (startCountDown > 0) {
-        return;
-    }
-
-    let who;
-    if (data.turnUserId === pubUserId || data.turnUserId === subUserId) {
-        who = '自分のターン';
-    } else if (data.turnUserId === 'auto') {
-        who = 'オート';
-    } else {
-        who = '相手のターン'
-    }
-    const dispmessage = who + '残り秒数' + data.countdown;
-    const element = document.getElementById('disp2');
-    if (element !== null) {
-        element.textContent = dispmessage;
-    }
-});
-/** {matchUserIdのuuid : id} */
-const opoHover: any = {};
-/** { id: string, matchUserId: string} */
-socketio.on("hoverServer", function (data) {
-    if (gameMode === 'InfiniteMode') {
-        if (data.matchUserId in opoHover) {
-            const el = document.getElementById(opoHover[data.matchUserId]);
-            if (el) {
-                el.classList.remove('opohover');
-            }
-        }
-        opoHover[data.matchUserId] = data.id;
-        if (data.id !== '') {
-            const dataidEle = document.getElementById(data.id);
-            dataidEle?.classList.add('opohover');
-        }
-    } else {
-        const elements = document.querySelectorAll('.opohover');
-        elements.forEach(element => {
-            element.classList.remove('opohover');
-        });
-        if (data.id !== '') {
-            const dataidEle = document.getElementById(data.id);
-            dataidEle?.classList.add('opohover');
-        }
-    }
-});
-
-//接続エラー時のイベント
-socketio.on('connect_error', (error) => {
-    console.log('nagai error テスト確認', error);
-    const element = document.getElementById('disp2');
-    if (element !== null) {
-        element.textContent = 'サーバーと通信ができなくなりました';
-    }
-});
-
-//ゲーム開始、待機画面に遷移
-const button = document.getElementById('go_game');
-if (button !== null) {
-    button.onclick = goGameButtonClick;
-}
-function goGameButtonClick() {
+function handleGoGameButtonClick(setWaitingDispDnone, setNameButtonDnone) {
     const el: any = document.getElementsByName('modeRadio');
     const len = el.length;
     for (let i = 0; i < len; i++) {
@@ -634,8 +636,8 @@ function goGameButtonClick() {
             gameMode = el.item(i).value;
         }
     }
-    document.getElementById('waiting_disp')?.classList.remove('d-none');
-    document.getElementById('name_button')?.classList.add('d-none');
+    setWaitingDispDnone(false);
+    setNameButtonDnone(true);
     const element = document.getElementById('nick') as HTMLInputElement;
     if (gameMode === 'SimpleMode') {
         socketio.emit("gogameSimpleMode", { roomId: roomId, passWord: passWord, subUserId: subUserId, pubUserId: pubUserId, name: element?.value });
@@ -650,8 +652,8 @@ function goGameButtonClick() {
  * 問題パネルのマスが押された時の処理 myClickクラスを一か所につける ただし、つけているところをクリックしたら消せる 
  * @returns 
  */
-function sudokuClick(id, idonazi, setMyClickId) {
-    if (idonazi) {
+function handleSudokuClick(id, id_onazi, setMyClickId) {
+    if (id_onazi) {
         setMyClickId('');
     } else {
         setMyClickId(id);
@@ -744,7 +746,7 @@ function handleSelectNumClick(clickNum, playState, setPlayState) {
 }
 
 /**点数処理 */
-function scoreProcess(points: any, endgame: any) {
+function scoreProcess(points: any, endgame: any, logValue, setPoint1Text, setPoint2Text, setLogValue, setDisp2TextContent, setNameButtonDnone) {
     let mypoint = 0;
     let opopoint = 0;
     Object.keys(points).forEach(muid => {
@@ -754,44 +756,30 @@ function scoreProcess(points: any, endgame: any) {
             opopoint = points[muid];
         }
     });
-    const p1ele = document.getElementById("point_1");
-    if (p1ele !== null) {
-        p1ele.textContent = String(mypoint);
-    }
-
-    const p2ele = document.getElementById("point_2");
-    if (p2ele !== null) {
-        p2ele.textContent = String(opopoint);
-    }
+    setPoint1Text(mypoint);
+    setPoint2Text(opopoint)
 
     if (endgame) {
-        const txarea = document.getElementById('log') as HTMLInputElement;
-        if (txarea !== null) {
-            txarea.value += 'ゲーム終了' + "\n";
-            txarea.scrollTop = txarea.scrollHeight;
-        }
-        const disp2Ele = document.getElementById('disp2');
-        if (disp2Ele !== null) {
-
-            if (mypoint > opopoint) {//nagai numberのはずなのでこの比較であっているはず
-                disp2Ele.textContent = 'Win!!!';
-            } else if (mypoint === opopoint) {
-                disp2Ele.textContent = 'Draw!';
-            } else {
-                disp2Ele.textContent = 'Lose';
-            }
+        setLogValue(logValue + 'ゲーム終了' + "\n");
+        if (mypoint > opopoint) {//nagai numberのはずなのでこの比較であっているはず
+            setDisp2TextContent('Win!!!');
+        } else if (mypoint === opopoint) {
+            setDisp2TextContent('Draw!');
+        } else {
+            setDisp2TextContent('Lose');
         }
 
         //roomId初期化
         localStorage.removeItem('roomId');
         roomId = null;//nagai本当にこれで良いか？
 
-        document.getElementById('name_button')?.classList.remove('d-none');
+        setNameButtonDnone(false);
     }
 }
 
 /**色をつけるクラスはずして初期化 */
 function removeClass(playState, setPlayState) {
+    console.log('nagai removeclass');
     const newPlayState = makeNewPlayState(playState);
     setPlayState(newPlayState);
 }
@@ -810,6 +798,7 @@ function makeNewPlayState(playState) {
         newPlayState['board'][key]['opoHover'] = false;
         newPlayState['board'][key]['own'] = false;
         newPlayState['board'][key]['opponent'] = false;
+        newPlayState['board'][key]['showHutoiBorder'] = false;
     });
     return newPlayState;
 }
