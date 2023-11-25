@@ -439,7 +439,7 @@ export function Main() {
             <div className="row d-flex justify-content-center">
                 <div className="col-md-6 mb-4" style={{ position: "relative" }}>
                     <SudokuTable playState={playState}></SudokuTable>
-                    <table className="select">
+                    <table className='select'>
                         <SelectNumButton id="1" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
                         <SelectNumButton id="2" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
                         <SelectNumButton id="3" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
@@ -467,7 +467,7 @@ export function Main() {
                             <form id="message_form" action="#" >
                                 <input id="input_msg" placeholder="message" value={inputMessage} onChange={(e) => {
                                     setInputMessage(e.target.value);
-                                }}  className="form-control mb-2" autoComplete="off" />
+                                }} className="form-control mb-2" autoComplete="off" />
                                 <button className="btn btn-primary" type="button" data-bs-toggle="tooltip" title="send message" onClick={() => {
                                     console.log('nagai onclick button');
                                     const element = document.getElementById('input_msg') as HTMLInputElement;
@@ -500,8 +500,18 @@ export function Main() {
     );
 }
 function SelectNumButton({ id, selectNumGlayOut, playState, setPlayState }) {
+    let dispNumCnt = 0;
+    Object.keys(playState['board']).forEach(key => {
+        if (playState['board'][key]['val'] === id) {
+            dispNumCnt++;
+        }
+    })
+
+
     return (
-        <td id={id} className={"numbutton" + (selectNumGlayOut ? " glayout" : "")} onClick={() => handleSelectNumClick(id, playState, setPlayState)}>{id}</td>
+        <td id={id} className={"numbutton" + ((selectNumGlayOut || dispNumCnt > 8) ? " glayout" : "") + (dispNumCnt < 9 ? " selectNumHover" : "")} onClick={() => {
+            if (dispNumCnt < 9) handleSelectNumClick(id, playState, setPlayState)
+        }}>{id}</td>
     );
 }
 function SudokuTable({ playState }) {
