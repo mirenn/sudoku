@@ -212,7 +212,7 @@ export function Main() {
                 //今は文字を画面に表示しているだけなので文字列で送ってくるだけで良い……。
                 const zahyo = '行' + String(parseInt(eventData.coordinate[0]) + 1) + '列' + String(parseInt(eventData.coordinate[1]) + 1);
                 const nyuuryoku = eventData.val;
-                const newLogValue = logValue + '自動展開' + ':' + zahyo + '：' + nyuuryoku + "\n";
+                const newLogValue = logRef.current?.value + '自動展開' + ':' + zahyo + '：' + nyuuryoku + "\n";
                 setLogValue(newLogValue);
                 const txarea = document.getElementById('log') as HTMLInputElement;
                 if (chatAreaRef.current) {
@@ -427,12 +427,6 @@ export function Main() {
                         Simple
                         <input className="form-check-input" type="radio" value="SimpleMode" name="modeRadio" id="SimpleMode" checked>
                         </input>
-                    </label>
-                </div>
-                <div className="form-check">
-                    <label className="form-check-label" htmlFor="TurnMode">
-                        Turn
-                        <input className="form-check-input" type="radio" value="TurnMode" name="modeRadio" id="TurnMode"></input>
                     </label>
                 </div>
                 <div className="form-check">
