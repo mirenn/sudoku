@@ -104,7 +104,50 @@ export function Main() {
     const [point2Text, setPoint2Text] = useState("");
     const [nameButtonDnone, setNameButtonDnone] = useState(false);
     const [inputMessage, setInputMessage] = useState("");
+    const [myClickId, setMyClickId] = useState("");
 
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        const key = e.code;
+        e.preventDefault();//画面のスクロールを止めるため
+
+        if (key === 'ArrowUp') {
+            let rowNum = Number(myClickId[0]);
+            if (rowNum > 0) {
+                rowNum--;
+            }
+            const newMyClickId = rowNum.toString() + myClickId[1];
+            setMyClickId(newMyClickId);
+        }
+
+        if (key === 'ArrowDown') {
+            let rowNum = Number(myClickId[0]);
+            if (rowNum < 8) {
+                rowNum++;
+            }
+            const newMyClickId = rowNum.toString() + myClickId[1];
+            setMyClickId(newMyClickId);
+        }
+
+        if (key === 'ArrowLeft') {
+            let colNum = Number(myClickId[1]);
+            if (colNum > 0) {
+                colNum--;
+            }
+            const newMyClickId = myClickId[0] + colNum.toString();
+            setMyClickId(newMyClickId);
+        }
+
+        if (key === 'ArrowRight') {
+            let colNum = Number(myClickId[1]);
+            if (colNum < 8) {
+                colNum++;
+            }
+            const newMyClickId = myClickId[0] + colNum.toString();
+            setMyClickId(newMyClickId);
+        }
+
+    }
     useEffect(() => {
         function SinglePlay(data) {
             singlePlayState = makeNewPlayState(data);
@@ -438,7 +481,7 @@ export function Main() {
             </div>
             <div className="row d-flex justify-content-center">
                 <div className="col-md-6 mb-4" style={{ position: "relative" }}>
-                    <SudokuTable playState={playState}></SudokuTable>
+                    <SudokuTable playState={playState} myClickId={myClickId} handleKeyDown={handleKeyDown} setMyClickId={setMyClickId} ></SudokuTable>
                     <table className='select'>
                         <SelectNumButton id="1" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
                         <SelectNumButton id="2" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
@@ -514,8 +557,7 @@ function SelectNumButton({ id, selectNumGlayOut, playState, setPlayState }) {
         }}>{id}</td>
     );
 }
-function SudokuTable({ playState }) {
-    const [myClickId, setMyClickId] = useState(false);
+function SudokuTable({ playState, myClickId, handleKeyDown, setMyClickId }) {
     const tableList: JSX.Element[] = [];
     for (let row = 0; row < 9; row++) {
         const rowList: JSX.Element[] = [];
@@ -526,7 +568,7 @@ function SudokuTable({ playState }) {
         tableList.push(<tr>{rowList}</tr>);
     }
     return (
-        <table id="sudoku" className="sudoku">
+        <table id="sudoku" className="sudoku" onKeyDown={handleKeyDown} tabIndex={0}>
             {tableList}
         </table>
     );
