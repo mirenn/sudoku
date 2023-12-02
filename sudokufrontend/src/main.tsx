@@ -247,8 +247,15 @@ export function Main() {
                 newPlayState['board'][eventData.coordinate]['showCross'] = true;
                 setPlayState(newPlayState);
                 setTimeout(function () {
-                    newPlayState['board'][eventData.coordinate]['showCross'] = false;
-                    setPlayState(newPlayState);
+                    // setPlayStateに関数を渡して、前回の値を取得して更新する
+                    setPlayState((prevPlayState) => {
+                        // 前回の値をコピーする
+                        const updatedPlayState = { ...prevPlayState };
+                        // showCrossをfalseにする
+                        updatedPlayState['board'][eventData.coordinate]['showCross'] = false;
+                        // 更新した値を返す
+                        return updatedPlayState;
+                    });
                 }, 1000);
             }
             if (eventData.status === 'auto' && gameMode === 'TurnMode') {//autoがそもそもturnmode限定
@@ -460,7 +467,7 @@ export function Main() {
             <span id="disp2" className={"d-flex justify-content-center mb-2" + (disp2Dnone ? " d-none" : "")}>{disp2TextContent}</span>
             <div id="name_button" className={"d-flex justify-content-center align-items-center mb-1" + (nameButtonDnone ? " d-none" : "")}>
                 <div className="form-group">
-                    <input type="text" className="form-control" id="nick" placeholder="Nickname" maxLength={24}></input>
+                    <input type="text" className="form-control" id="nick" placeholder="Nickname" maxLength={24} />
                 </div>
                 <div className="d-flex mx-3">
                     <button id="go_game" onClick={() => { handleGoGameButtonClick(setWaitingDispDnone, setNameButtonDnone) }} className="btn btn-primary rounded-pill" type="button">Play Online</button>
@@ -468,14 +475,13 @@ export function Main() {
                 <div className="form-check">
                     <label className="form-check-label" htmlFor="SimpleMode">
                         Simple
-                        <input className="form-check-input" type="radio" value="SimpleMode" name="modeRadio" id="SimpleMode" checked>
-                        </input>
+                        <input className="form-check-input" type="radio" value="SimpleMode" name="modeRadio" id="SimpleMode" defaultChecked />
                     </label>
                 </div>
                 <div className="form-check">
                     <label className="form-check-label" htmlFor="InfiniteMode">
                         Infinite
-                        <input className="form-check-input" type="radio" value="InfiniteMode" name="modeRadio" id="InfiniteMode"></input>
+                        <input className="form-check-input" type="radio" value="InfiniteMode" name="modeRadio" id="InfiniteMode" />
                     </label>
                 </div>
             </div>
@@ -483,15 +489,19 @@ export function Main() {
                 <div className="col-md-6 mb-4" style={{ position: "relative" }}>
                     <SudokuTable playState={playState} myClickId={myClickId} handleKeyDown={handleKeyDown} setMyClickId={setMyClickId} ></SudokuTable>
                     <table className='select'>
-                        <SelectNumButton id="1" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
-                        <SelectNumButton id="2" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
-                        <SelectNumButton id="3" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
-                        <SelectNumButton id="4" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
-                        <SelectNumButton id="5" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
-                        <SelectNumButton id="6" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
-                        <SelectNumButton id="7" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
-                        <SelectNumButton id="8" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
-                        <SelectNumButton id="9" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                        <tbody>
+                            <tr>
+                                <SelectNumButton id="1" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                                <SelectNumButton id="2" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                                <SelectNumButton id="3" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                                <SelectNumButton id="4" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                                <SelectNumButton id="5" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                                <SelectNumButton id="6" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                                <SelectNumButton id="7" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                                <SelectNumButton id="8" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                                <SelectNumButton id="9" selectNumGlayOut={selectNumGlayOut} playState={playState} setPlayState={setPlayState} ></SelectNumButton>
+                            </tr>
+                        </tbody>
                     </table>
                 </div>
                 <div id="dashboard" className={"card col-md-3 mb-4 box-shadow" + (dashboardDnone ? " d-none" : "")}>
@@ -544,12 +554,13 @@ export function Main() {
 }
 function SelectNumButton({ id, selectNumGlayOut, playState, setPlayState }) {
     let dispNumCnt = 0;
-    Object.keys(playState['board']).forEach(key => {
-        if (playState['board'][key]['val'] === id) {
-            dispNumCnt++;
-        }
-    })
-
+    if (playState['board']) {
+        Object.keys(playState['board']).forEach(key => {
+            if (playState['board'][key]['val'] === id) {
+                dispNumCnt++;
+            }
+        })
+    }
 
     return (
         <td id={id} className={"numbutton" + ((selectNumGlayOut || dispNumCnt > 8) ? " glayout" : "") + (dispNumCnt < 9 ? " selectNumHover" : "")} onClick={() => {
@@ -565,11 +576,13 @@ function SudokuTable({ playState, myClickId, handleKeyDown, setMyClickId }) {
             const key = row.toString() + col.toString();
             rowList.push(<SudokuTd id={key} key={key} myClickId={myClickId} setMyClickId={setMyClickId} playState={playState}></SudokuTd>)
         }
-        tableList.push(<tr>{rowList}</tr>);
+        tableList.push(<tr key={row}>{rowList}</tr>);
     }
     return (
         <table id="sudoku" className="sudoku" onKeyDown={handleKeyDown} tabIndex={0}>
-            {tableList}
+            <tbody>
+                {tableList}
+            </tbody>
         </table>
     );
 }
@@ -577,19 +590,19 @@ function SudokuTable({ playState, myClickId, handleKeyDown, setMyClickId }) {
 function SudokuTd({ id, playState, myClickId, setMyClickId }) {
     return (
         <td id={id} className={"clickenable" + (myClickId === id ? " myClick" : "")
-            + (playState['board'][id]['showCross'] ? " cross" : "")
-            + (playState['board'][id]['opoClick'] ? " opoClick" : "")
-            + (playState['board'][id]['opoHover'] ? " opoHover" : "")
-            + (playState['board'][id]['own'] ? " own" : "")
-            + (playState['board'][id]['opponent'] ? " opponent" : "")
-            + (playState['board'][id]['showHutoiBorder'] ? " hutoiborder" : "")}
+            + (playState['board']?.[id]?.['showCross'] ? " cross" : "")
+            + (playState['board']?.[id]?.['opoClick'] ? " opoClick" : "")
+            + (playState['board']?.[id]?.['opoHover'] ? " opoHover" : "")
+            + (playState['board']?.[id]?.['own'] ? " own" : "")
+            + (playState['board']?.[id]?.['opponent'] ? " opponent" : "")
+            + (playState['board']?.[id]?.['showHutoiBorder'] ? " hutoiborder" : "")}
             onMouseEnter={() => {
                 socketio.emit("hover", { id: id });
             }}
             onMouseLeave={() => { socketio.emit('hover', { id: '' }) }}
             onClick={() => {
                 handleSudokuClick(id, id === myClickId, setMyClickId);
-            }} >{playState['board'][id]['val']}</td>
+            }} >{playState['board']?.[id]?.['val']}</td>
     );
 }
 
@@ -615,7 +628,7 @@ export function Ranking() {
         const dispname = (id === pubUserId) ? name + '（あなた）' : name;
 
         list.push(
-            <tr>
+            <tr key={id}>
                 <th>{ranknum}</th>
                 <td>{dispname}</td>
                 <td>{rate}</td>
@@ -731,8 +744,15 @@ function handleSelectNumClick(clickNum, playState, setPlayState) {
             newPlayState['board'][sudokuTableMyClickId]['showCross'] = true;
             setPlayState(newPlayState);
             setTimeout(function () {
-                newPlayState['board'][sudokuTableMyClickId]['showCross'] = false;
-                setPlayState(newPlayState);
+                // setPlayStateに関数を渡して、前回の値を取得して更新する
+                setPlayState((prevPlayState) => {
+                    // 前回の値をコピーする
+                    const updatedPlayState = { ...prevPlayState };
+                    // showCrossをfalseにする
+                    updatedPlayState['board'][sudokuTableMyClickId]['showCross'] = false;
+                    // 更新した値を返す
+                    return updatedPlayState;
+                });
             }, 1000);
         }
 
