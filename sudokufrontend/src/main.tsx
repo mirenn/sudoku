@@ -6,7 +6,6 @@ import { socketio } from './socket';
 import { useEffect, useState, useRef } from "react";
 
 /**
-* 他人にばれてはいけないユーザーID
 * pubUserIDのログインパスワードのようなもの
 */
 let passWord = localStorage.getItem('userId');
@@ -106,48 +105,6 @@ export function Main() {
     const [inputMessage, setInputMessage] = useState("");
     const [myClickId, setMyClickId] = useState("");
 
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-        const key = e.code;
-        e.preventDefault();//画面のスクロールを止めるため
-
-        if (key === 'ArrowUp') {
-            let rowNum = Number(myClickId[0]);
-            if (rowNum > 0) {
-                rowNum--;
-            }
-            const newMyClickId = rowNum.toString() + myClickId[1];
-            setMyClickId(newMyClickId);
-        }
-
-        if (key === 'ArrowDown') {
-            let rowNum = Number(myClickId[0]);
-            if (rowNum < 8) {
-                rowNum++;
-            }
-            const newMyClickId = rowNum.toString() + myClickId[1];
-            setMyClickId(newMyClickId);
-        }
-
-        if (key === 'ArrowLeft') {
-            let colNum = Number(myClickId[1]);
-            if (colNum > 0) {
-                colNum--;
-            }
-            const newMyClickId = myClickId[0] + colNum.toString();
-            setMyClickId(newMyClickId);
-        }
-
-        if (key === 'ArrowRight') {
-            let colNum = Number(myClickId[1]);
-            if (colNum < 8) {
-                colNum++;
-            }
-            const newMyClickId = myClickId[0] + colNum.toString();
-            setMyClickId(newMyClickId);
-        }
-
-    }
     useEffect(() => {
         function SinglePlay(data) {
             singlePlayState = makeNewPlayState(data);
@@ -551,6 +508,55 @@ export function Main() {
             <Ranking></Ranking>
         </>
     );
+    /**
+     * 数独テーブル上でキーボードを押したときの操作。
+     * @param e 
+     */
+    function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+        const key = e.code;
+        console.log(key);
+        e.preventDefault();//画面のスクロールを止めるため
+
+        if (key === 'ArrowUp') {
+            let rowNum = Number(myClickId[0]);
+            if (rowNum > 0) {
+                rowNum--;
+            }
+            const newMyClickId = rowNum.toString() + myClickId[1];
+            setMyClickId(newMyClickId);
+        }
+
+        if (key === 'ArrowDown') {
+            let rowNum = Number(myClickId[0]);
+            if (rowNum < 8) {
+                rowNum++;
+            }
+            const newMyClickId = rowNum.toString() + myClickId[1];
+            setMyClickId(newMyClickId);
+        }
+
+        if (key === 'ArrowLeft') {
+            let colNum = Number(myClickId[1]);
+            if (colNum > 0) {
+                colNum--;
+            }
+            const newMyClickId = myClickId[0] + colNum.toString();
+            setMyClickId(newMyClickId);
+        }
+
+        if (key === 'ArrowRight') {
+            let colNum = Number(myClickId[1]);
+            if (colNum < 8) {
+                colNum++;
+            }
+            const newMyClickId = myClickId[0] + colNum.toString();
+            setMyClickId(newMyClickId);
+        }
+        if (key === 'Numpad0' || key === 'Numpad1' || key === 'Numpad2' || key === 'Numpad3' || key === 'Numpad4' || key === 'Numpad5' || key === 'Numpad6' || key === 'Numpad7' || key === 'Numpad8' || key === 'Numpad9' || key === 'Digit0' || key === 'Digit1' || key === 'Digit2' || key === 'Digit3' || key === 'Digit4' || key === 'Digit5' || key === 'Digit6' || key === 'Digit7' || key === 'Digit8' || key === 'Digit9') {
+            // 数字キーボードのいずれかのキーが押されたときの処理
+            handleSelectNumClick(key[-1], playState, setPlayState);
+        }
+    }
 }
 function SelectNumButton({ id, selectNumGlayOut, playState, setPlayState }) {
     let dispNumCnt = 0;
@@ -720,9 +726,8 @@ function handleSudokuClick(id, id_onazi, setMyClickId) {
     socketio.emit("myselect", id);
 }
 
-/** 数字選択のマスを押した時の処理 */
+/** 数字選択のマスを押した時の処理及び数字キーボードを押したときの処理 */
 function handleSelectNumClick(clickNum, playState, setPlayState) {
-    console.log('nagai select click');
     if (singlePlayFlag) {
         const sudokuTableMyClickTarget = document.getElementsByClassName("myClick");
         if (sudokuTableMyClickTarget.length === 0) { return; }//数独の盤面で選択対象がない場合
