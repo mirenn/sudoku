@@ -315,7 +315,7 @@ export function Main() {
             setPlayState(newPlayState);
 
             if (endgame) {
-                removeClass(setPlayState, setPlayState);
+                removeClass(playState, setPlayState);
             }
         }
         socketio.on('stateInfiniteMode', StateInfiniteMode);
