@@ -8,14 +8,15 @@ import { useEffect, useState, useRef } from "react";
 /**
 * pubUserIDのログインパスワードのようなもの
 */
-let passWord = localStorage.getItem('userId');
+let passWord = localStorage.getItem('userId');//廃止予定
 if (!passWord) {
     passWord = self.crypto.randomUUID();
-    localStorage.setItem('userId', passWord);
+    localStorage.setItem('userId', passWord);//廃止予定
     localStorage.setItem('passWord', passWord);//移行中。userIdではなくこちらで置き換える予定。userIdはいらない
 } else {
     localStorage.setItem('passWord', passWord);//移行中
 }
+
 /**
  * 公開用ユーザーID
  * サーバーから返却される盤面情報のユーザー識別子/ランキングのユーザー識別子に使用。
@@ -33,14 +34,6 @@ const subUserId = self.crypto.randomUUID();
 //部屋ID //途中で切断しても戻れるように
 let roomId = localStorage.getItem('roomId');
 
-const input = document.getElementById('nick') as HTMLInputElement;
-const ncname = localStorage.getItem('name');
-if (ncname) {
-    input.value = ncname;
-}
-input.addEventListener('input', (event) => {
-    localStorage.setItem('name', (event.target as HTMLInputElement).value);
-});
 const INFINITROOM = 'InfiniteRoom';
 
 //let ranking;
@@ -104,17 +97,9 @@ export function Main() {
     const [nameButtonDnone, setNameButtonDnone] = useState(false);
     const [inputMessage, setInputMessage] = useState("");
     const [myClickId, setMyClickId] = useState("");
+    const [nickName, setNickName] = useState(localStorage.getItem('name'));
 
     useEffect(() => {
-        function SinglePlay(data) {
-            singlePlayState = makeNewPlayState(data);
-            console.log('nagai 一人用の場合のデータ', singlePlayState);
-            localStorage.setItem('singlePlayState', JSON.stringify(singlePlayState));
-
-            if (singlePlayFlag) {
-                setPlayState(singlePlayState);
-            }
-        }
         //一人用のゲーム盤面要求
         socketio.on('singleplay', SinglePlay);
 
@@ -424,7 +409,7 @@ export function Main() {
             <span id="disp2" className={"d-flex justify-content-center mb-2" + (disp2Dnone ? " d-none" : "")}>{disp2TextContent}</span>
             <div id="name_button" className={"d-flex justify-content-center align-items-center mb-1" + (nameButtonDnone ? " d-none" : "")}>
                 <div className="form-group">
-                    <input type="text" className="form-control" id="nick" placeholder="Nickname" maxLength={24} />
+                    <input type="text" className="form-control" id="nick" placeholder="Nickname" maxLength={24} value={nickName} onChange={handleChangeNickName} />
                 </div>
                 <div className="d-flex mx-3">
                     <button id="go_game" onClick={() => { handleGoGameButtonClick(setWaitingDispDnone, setNameButtonDnone) }} className="btn btn-primary rounded-pill" type="button">Play Online</button>
@@ -508,6 +493,12 @@ export function Main() {
             <Ranking></Ranking>
         </>
     );
+
+    function handleChangeNickName(e) {
+        // inputタグの値を取得し、nickNameにセット
+        setNickName(e.target.value);
+        localStorage.setItem('name', (e.target as HTMLInputElement).value);
+    }
     /**
      * 数独テーブル上でキーボードを押したときの操作。
      * @param e 
@@ -555,6 +546,15 @@ export function Main() {
         if (key === 'Numpad0' || key === 'Numpad1' || key === 'Numpad2' || key === 'Numpad3' || key === 'Numpad4' || key === 'Numpad5' || key === 'Numpad6' || key === 'Numpad7' || key === 'Numpad8' || key === 'Numpad9' || key === 'Digit0' || key === 'Digit1' || key === 'Digit2' || key === 'Digit3' || key === 'Digit4' || key === 'Digit5' || key === 'Digit6' || key === 'Digit7' || key === 'Digit8' || key === 'Digit9') {
             // 数字キーボードのいずれかのキーが押されたときの処理
             handleSelectNumClick(key[-1], playState, setPlayState);
+        }
+    }
+    function SinglePlay(data) {
+        singlePlayState = makeNewPlayState(data);
+        console.log('nagai 一人用の場合のデータ', singlePlayState);
+        localStorage.setItem('singlePlayState', JSON.stringify(singlePlayState));
+
+        if (singlePlayFlag) {
+            setPlayState(singlePlayState);
         }
     }
 }
