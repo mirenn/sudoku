@@ -77,8 +77,19 @@ async function main() {
     });
     //一覧取得
     app.use('/', express_1.default.static('public'));
+    let socketOpt = {};
+    if (process.env.NODE_ENV === 'development') {
+        socketOpt =
+            {
+                cors: {
+                    origin: ["http://localhost:5173"]
+                }
+            };
+    }
+    else {
+    }
     const server = http_1.default.createServer(app);
-    const io = new socket_io_1.default.Server(server);
+    const io = new socket_io_1.default.Server(server, socketOpt);
     /*connection(webSocket確立時)*/
     io.on('connection', function (socket) {
         const count = io.engine.clientsCount;

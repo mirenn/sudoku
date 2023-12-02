@@ -164,8 +164,19 @@ async function main() {
     //一覧取得
     app.use('/', express.static('public'));
 
+    let socketOpt = {};
+    if (process.env.NODE_ENV === 'development') {
+        socketOpt =
+        {
+            cors: {
+                origin: ["http://localhost:5173"]
+            }
+        };
+    } else {
+
+    }
     const server: http.Server = http.createServer(app);
-    const io: socketio.Server = new socketio.Server(server);
+    const io: socketio.Server = new socketio.Server(server, socketOpt);
 
     /*connection(webSocket確立時)*/
     io.on('connection', function (socket) {

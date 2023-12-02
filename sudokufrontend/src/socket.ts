@@ -41,4 +41,12 @@ interface ClientToServerEvents {
 
 }
 
-export const socketio: Socket<ServerToClientEvents, ClientToServerEvents> = io();
+//"http://localhost:3000"
+let socketio: Socket<ServerToClientEvents, ClientToServerEvents>;
+if (process.env.NODE_ENV === 'development') {
+    socketio = io("http://localhost:3000");
+} else {
+    socketio = io();
+}
+// 代入した変数をexportする
+export { socketio };
