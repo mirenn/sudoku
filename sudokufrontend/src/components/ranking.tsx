@@ -19,7 +19,7 @@ export function Ranking({pubUserId}) {
     const list: JSX.Element[] = [];
     rdata.forEach(({ name, rate, id }, index) => {
         const rank = getRank(rate);
-        const ranknum = String(index) + 1;
+        const ranknum = index + 1;
         const dispname = (id === pubUserId) ? name + '（あなた）' : name;
 
         list.push(
