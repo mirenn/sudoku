@@ -378,6 +378,10 @@ export function Main() {
         }
         //接続エラー時のイベント
         socketio.on('connect_error', Connect_Error);
+        function Connect(){
+            setDisp2TextContent('接続');
+        }
+        socketio.on('connect',Connect);
 
         return () => {
             socketio.off('singleplay', SinglePlay);
@@ -392,6 +396,7 @@ export function Main() {
             socketio.off("turnCount", TurnCount);
             socketio.off("hoverServer", HoverServer);
             socketio.off('connect_error', Connect_Error);
+            socketio.off('connect',Connect);
         };
     }, []);
     return (
