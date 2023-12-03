@@ -76,15 +76,16 @@ const getNickName = getName ? getName : "";
 
 export function Main() {
     const [playState, setPlayState] = useState(singlePlayState);
-    const [waitingNumText, setWaitingNumText] = useState("");
     const [dashboardDnone, setDashBoardDnone] = useState(true);
     const [disp2Dnone, setDisp2Dnone] = useState(true);
+    const [disp2TextContent, setDisp2TextContent] = useState("");
+    /** @type {boolean} 対戦待ち接続中の表示非表示 */
     const [waitingDispDnone, setWaitingDispDnone] = useState(true);
+    const [waitingNumText, setWaitingNumText] = useState("");
     const [waitingNumDnone, setWaitingNumDnone] = useState(false);
     const [logValue, setLogValue] = useState("");
     const logRef = useRef<HTMLTextAreaElement>(null);
     const [highLowNum, setHighLowNum] = useState(4);
-    const [disp2TextContent, setDisp2TextContent] = useState("");
     /** @type {boolean} 数独パネルをグレーアウトさせる */
     const [selectNumGlayOut, setSelectNumGlayOut] = useState(false);
     const [chatAreaValue, setChatAreaValue] = useState("");
