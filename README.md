@@ -13,7 +13,7 @@
 * ただし、起動にはAzure CosmosDBが必要で、DBの作成及び接続情報を実行環境の環境変数に持たせる必要あり。
 * サーバー<http://localhost:3000>にアクセスしたとき、sudokubackend/distディレクトリの内容を公開しております。これはsudokufrontendのビルドしたものを入れるようにしてあります。
 
-## sudokufrontend
+### sudokufrontend
 フロントエンド
 * npm run dev：viteのHMRのサーバー<http://localhost:5173>が立つ。コードを編集すると変更内容がすぐに反映されて、開発に便利。sudokubackendをnpm run devで動かしながら、これを動かす。
 * npm run build：ビルド。ビルド先はsudokubackend/distディレクトリ。
