@@ -378,10 +378,10 @@ export function Main() {
         }
         //接続エラー時のイベント
         socketio.on('connect_error', Connect_Error);
-        function Connect(){
+        function Connect() {
             setDisp2TextContent('接続');
         }
-        socketio.on('connect',Connect);
+        socketio.on('connect', Connect);
 
         return () => {
             socketio.off('singleplay', SinglePlay);
@@ -396,7 +396,7 @@ export function Main() {
             socketio.off("turnCount", TurnCount);
             socketio.off("hoverServer", HoverServer);
             socketio.off('connect_error', Connect_Error);
-            socketio.off('connect',Connect);
+            socketio.off('connect', Connect);
         };
     }, []);
     return (
@@ -490,9 +490,7 @@ export function Main() {
         console.log('nagai 一人用の場合のデータ', singlePlayState);
         localStorage.setItem('singlePlayState', JSON.stringify(singlePlayState));
 
-        if (singlePlayFlag) {
-            setPlayState(singlePlayState);
-        }
+        setPlayState(singlePlayState);
     }
 }
 
@@ -554,7 +552,7 @@ function scoreProcess(points: any, endgame: any, logValue, setPoint1Text, setPoi
 
 /**色をつけるクラスはずして初期化 */
 function removeClass(playState, setPlayState) {
-    console.log('nagai removeclass');
+    console.log('nagai removeclass', playState);
     const newPlayState = makeNewPlayState(playState);
     setPlayState(newPlayState);
 }
